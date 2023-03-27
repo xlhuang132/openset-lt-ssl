@@ -48,6 +48,9 @@ class ACSSLTrainer(BaseTrainer):
         self.t2=cfg.ALGORITHM.ACSSL.T2 # 0.1
         self.lambda_a=1.
         
+        
+        if self.cfg.RESUME !="":
+            self.load_checkpoint(self.cfg.RESUME)  
     
     def loss_init(self):
         self.losses = AverageMeter()
