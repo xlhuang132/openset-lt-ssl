@@ -1,0 +1,52 @@
+
+
+OUTPUT_DIR: "outputs/"
+SEED : 7
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 300
+TRAIN_STEP: 500 # 每个训练epoch有多少次迭代 
+
+ALGORITHM:
+  NAME: "MTCF"
+  CONFIDENCE_THRESHOLD: 0.95  
+  PRE_TRAIN: 
+    ENABLE: True
+    WARMUP_EPOCH: 10
+
+MODEL:
+  NAME: "Resnet34"  
+  
+  DUAL_HEAD_ENABLE: True   
+  DUAL_HEAD_OUT_DIM: 1
+
+  LOSS:
+    LABELED_LOSS: "SemiLoss"    
+
+DATASET:
+  NAME: "cifar10"
+  ROOT: "./data/cifar10" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]
+  
+  IFS: [100]
+  OODRS: [0.5]  
+  DL:
+    NUM_LABELED_HEAD: 1500
+    IMB_FACTOR_L: 50
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD:  3000 # 744 #
+      IMB_FACTOR_UL: 50
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.5 
+    
+    UNLABELED_BATCH_RATIO: 2
+  
+  NUM_WORKERS : 4
+
+# RESUME : '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/MTCF/Resnet34/DL-1500-IF-50-DU3000-IF_U-50/OOD-TIN-r-0.75/models/best_model.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/MTCF/Resnet34/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-r-0.75/models/best_model.pth'

@@ -1,0 +1,64 @@
+
+
+OUTPUT_DIR: "outputs/"
+
+SEED : 7
+GPU_MODE: True 
+ALGORITHM:
+  NAME: "baseline" #"Ours"
+  CONFIDENCE_THRESHOLD: 0.95  
+MODEL:
+  NAME: "Resnet34" #"WRN_28_2"
+  LOSS:
+    LABELED_LOSS: "CrossEntropyLoss" 
+    WITH_LABELED_COST_SENSITIVE: False
+    UNLABELED_LOSS: "CrossEntropyLoss"
+    UNLABELED_LOSS_WEIGHT: 1.0
+    WITH_SUPPRESSED_CONSISTENCY: False   
+
+DATASET:
+  NAME: "cifar10"
+  ROOT: "./data/cifar10" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]
+  NUM_WORKERS : 2
+  BATCH_SIZE: 64 # 测试OOD detector 批大小为1
+  IMB_TYPE: 'exp'
+  DL:
+    NUM_LABELED_HEAD: 1500
+    IMB_FACTOR_L: 100
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 3000
+      IMB_FACTOR_UL: 100
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.0 # n(ood)/n(du) OOD样本占无标签样本数量的比值  
+    
+    UNLABELED_BATCH_RATIO: 2
+ # ["ClassReversedSampler" , "RandomSampler" , "ClassAwareSampler" , "ClassBalancedSampler"]
+
+  DUAL_SAMPLER:
+    ENABLE: True
+    NAME: "ClassReversedSampler" # 双采样分支
+
+# ======= 画图分析 =======
+# 1 - mixup [Single branch, Dual branch] [ID,OOD]对性能的影响
+# 2 - 不同 OOD R [0.0 0.25 0.5 0.75 1.0] 对模型的影响
+# 3 - 分析ood占du比例对模型性能影响
+# 4 - DL-IF100 DU-ID-IF1 OOD-None 在DL长尾情况下，DU平衡情况下，半监督方法的性能 2022.10.21[DL不同IF情况+DU平衡，模型性能]
+# 5 - 可视化DL数据TSNE图 DU数据TSNE图 final model
+# 6 - 可视化DU数据TSNE图 wramup epoch 主要看能否把ID和ood数据分开
+#  7:"the influence of different IF of DL and DU to model",
+#     8:"the task of our work", # 纯画图
+#     9:"the prob of dual sample branch",# 纯画图
+#     10:"the ablation experiments of model"}
+#     11:"analyse11_test_feature_TSNE_ablation",
+#     12:"problem  test data feature tsne",
+#     13:'the zhexian fig of generalization performance',
+#     14:"the influence of OOD to tail class",
+#     15:"the tail tsne of OOD to tail class"
+# 16:"zhexian of lambda pap"
+ANALYSE_TYPE: [2] 

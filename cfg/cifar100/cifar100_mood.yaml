@@ -1,0 +1,93 @@
+
+
+OUTPUT_DIR: "outputs_knn/" # 0.1* id loss + 0.1*ood loss + EMA更新特征 + 更新域标签 + thresh 0.8
+
+# SEED : 7  _upper_bound
+
+# SEED_PATH_ENABLE : True 
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 300
+TRAIN_STEP: 500 # 
+ALGORITHM:
+  NAME: "MOOD"
+  CONFIDENCE_THRESHOLD: 0.95
+  MOOD:
+    NUM_AUG: 2
+    TEMPERATURE: 0.5 # ?
+    MIXUP_ALPHA: 0.5  
+    PAP_LOSS_WEIGHT: 0.1
+    FEATURE_LOSS_TEMPERATURE: 0.5
+  ABLATION: 
+    ENABLE: False
+    DUAL_BRANCH: False
+    MIXUP: False     
+    OOD_DETECTION: False 
+    PAP_LOSS: False
+  PRE_TRAIN: 
+    ENABLE: True
+    WARMUP_EPOCH: 100
+    SimCLR: 
+      ENABLE: True
+      TEMPERATURE: 0.5
+    OOD_DETECTOR:
+      TEMPERATURE: 0.5
+      MAGNITUDE: 0.0014 #  
+      THRESHOLD: 0.10004 
+      K: 200 # 'Top k most similar images used to predict the label'
+    
+      
+MODEL:
+  NAME: "Resnet34" #"resnet50" #"WRN_28_2" # 
+  LOSS:
+    LABELED_LOSS: "CrossEntropyLoss" 
+    LABELED_LOSS_CLASS_WEIGHT_TYPE: "None"   # [ "CBLoss" "Reweight" "None" ]  
+    UNLABELED_LOSS: "CrossEntropyLoss"
+    UNLABELED_LOSS_WEIGHT: 1.0
+    WITH_SUPPRESSED_CONSISTENCY: False 
+    FEATURE_LOSS:
+      TEMPERATURE: 0.5 
+      CENTER_DECAY_RATIO: 0.9
+
+  OPTIMIZER:
+    TYPE: 'SGD'
+    BASE_LR: 0.03
+    MOMENTUM: 0.9
+    WEIGHT_DECAY: 5e-4 
+
+DATASET:
+  NAME: "cifar100"
+  ROOT: "./data/cifar100" 
+  NUM_CLASSES: 100
+  GROUP_SPLITS: [30,35,35]
+  DOMAIN_DATASET_RETURN_INDEX: True
+  UNLABELED_DATASET_RETURN_INDEX: True
+  LABELED_DATASET_RETURN_INDEX: True
+  IMB_TYPE: 'exp'
+  DL:
+    NUM_LABELED_HEAD: 150
+    IMB_FACTOR_L: 100
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 300
+      IMB_FACTOR_UL: 100
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.75 #  
+    UNLABELED_BATCH_RATIO: 2
+  BATCH_SIZE: 64
+  NUM_WORKERS: 8
+   
+  DUAL_SAMPLER:
+    ENABLE: True
+    NAME: "ClassReversedSampler"  
+  
+  TRANSFORM:
+    UNLABELED_STRONG_AUG: True
+    LABELED_STRONG_AUG: True
+
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs_knn/cifar100/MOOD/WRN_28_2/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-r-0.25/models/warmup_model.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs_knn/cifar100/MOOD/Resnet34/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-r-0.50/models/warmup_model.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/checkpoint/cifar100_IF100_R0.75_7'

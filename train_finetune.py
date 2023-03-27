@@ -54,7 +54,7 @@ for if_ in IF:  # if
         print("*************{} IF {}  R {} begin *************".format(cfg.DATASET.NAME,if_,r))
         cfg.freeze() 
         trainer=build_trainer(cfg)
-        trainer.train()
+        trainer.finetune()
         print("*************{} IF {}  R {} end *************".format(cfg.DATASET.NAME,if_,r))
         
         

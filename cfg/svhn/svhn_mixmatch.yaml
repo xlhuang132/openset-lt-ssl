@@ -1,0 +1,53 @@
+
+
+OUTPUT_DIR: "outputs/"
+SEED: 7
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 500
+TRAIN_STEP: 500  
+ALGORITHM:
+  NAME: "MixMatch" 
+
+  # PRE_TRAIN: 
+  #   ENABLE: True
+  #   WARMUP_EPOCH: 100
+  #   SimCLR: 
+  #     ENABLE: True
+  #     TEMPERATURE: 0.5  
+  #   OOD_DETECTOR:
+  #     TEMPERATURE: 0.5
+  #     MAGNITUDE: 0.0014 #  
+  #     THRESHOLD: 0.10004
+  #     DOMAIN_Y_UPDATE_ITER: 5
+  #     K: 10 # 'Top k most similar images used to predict the label'
+   
+   
+MODEL:
+  NAME: "WRN_28_2" #"Resnet34" #
+  LOSS:
+    LABELED_LOSS: "MixmatchLoss"  
+ 
+DATASET:
+  NAME: "svhn"
+  ROOT: "./data/svhn" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]
+  
+  IFS: [100]
+  OODRS: [0.0]  
+  DL:
+    NUM_LABELED_HEAD: 1500
+    # IMB_FACTOR_L: 100
+  DU: 
+    ID:
+      NUM_UNLABELED_HEAD:   4500 
+      # IMB_FACTOR_UL: 100 
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      INCLUDE_ALL: True
+      # RATIO: 0.0  
+  NUM_WORKERS: 4
+
+ 

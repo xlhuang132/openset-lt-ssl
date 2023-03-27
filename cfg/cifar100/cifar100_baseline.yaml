@@ -1,0 +1,52 @@
+
+
+OUTPUT_DIR: "outputs/"
+
+SEED : 7  
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 500
+TRAIN_STEP: 500 # 每个训练epoch有多少次迭代 
+ALGORITHM:
+  NAME: "baseline"
+  CONFIDENCE_THRESHOLD: 0.95 
+  BRANCH1_MIXUP: False # 是否对第1个采样通道进行mixup
+  BRANCH2_MIXUP: False # 是否对第二个采样通道进行mixup
+
+MODEL:
+  NAME: "Resnet34" # "WRN_28_2"
+  LOSS:
+    LABELED_LOSS: "CrossEntropyLoss" 
+    WITH_LABELED_COST_SENSITIVE: False
+    UNLABELED_LOSS: "CrossEntropyLoss"
+    UNLABELED_LOSS_WEIGHT: 1.0
+    WITH_SUPPRESSED_CONSISTENCY: False 
+
+  OPTIMIZER:
+    TYPE: 'SGD'
+    BASE_LR: 0.03
+    MOMENTUM: 0.9
+    WEIGHT_DECAY: 2e-4
+
+DATASET:
+  NAME: "cifar100"
+  ROOT: "./data/cifar100" 
+  NUM_CLASSES: 100
+  GROUP_SPLITS: [30,35,35]   
+  IMB_TYPE: 'exp'
+  DL:
+    NUM_LABELED_HEAD: 150
+    IMB_FACTOR_L: 100 
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 300 #744 #
+      IMB_FACTOR_UL: 100
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.0 # n(ood)/n(du) OOD样本占无标签样本数量的比值  
+    
+    UNLABELED_BATCH_RATIO: 2 
+  NUM_WORKERS: 8 
+ 

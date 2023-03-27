@@ -1,0 +1,69 @@
+
+
+OUTPUT_DIR: "outputs_ood/"
+SEED : 7 
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 300
+TRAIN_STEP: 500  
+ALGORITHM:
+  NAME: "DASO" # Fixmatch+daso
+  CONFIDENCE_THRESHOLD: 0.95  
+  DASO:
+    WITH_DIST_AWARE: True
+    # DIST_TEMP=1.5 if \gamma_l==\gamma_u else 0.3 for CIFAR10.
+    DIST_TEMP: 1.5
+    # blend pseudo-labels with fixed weight (applied only when WITH_DIST_AWARE is False).
+    INTERP_ALPHA: 0.5
+    PSA_LOSS_WEIGHT: 1.0  # loss weight for semantic alignment loss
+    WARMUP_ITER: 5000
+  PRE_TRAIN: 
+    ENABLE: True 
+    WARMUP_EPOCH: 100
+    SimCLR: 
+      ENABLE: True
+      TEMPERATURE: 0.5
+    OOD_DETECTOR:
+      TEMPERATURE: 0.5
+      MAGNITUDE: 0.0014 #  
+      THRESHOLD: 0.10004
+      DOMAIN_Y_UPDATE_ITER: 5
+      K: 10 # 'Top k most similar images used to predict the label'
+      OOD_THRESHOLD: 0.5
+      ID_THRESHOLD: 0.5
+
+MODEL:
+  NAME: "WRN_28_2" #'Resnet34' #
+  LOSS:
+    LABELED_LOSS: "CrossEntropyLoss"  
+    WITH_LABELED_COST_SENSITIVE: False
+    UNLABELED_LOSS: "CrossEntropyLoss"   
+
+  QUEUE:
+    FEAT_DIM:  128 # 512 #-wrn_28_2
+    MAX_SIZE: 256  
+  
+DATASET:
+  NAME: "cifar10"
+  ROOT: "./data/cifar10" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]
+  
+  IFS: [100]
+  OODRS: [0.5]  
+  DL:
+    NUM_LABELED_HEAD: 1500
+    IMB_FACTOR_L: 100
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 3000
+      IMB_FACTOR_UL: 100
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.0 # n(ood)/n(du)  
+    
+    UNLABELED_BATCH_RATIO: 2
+   
+

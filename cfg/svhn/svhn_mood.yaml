@@ -1,0 +1,80 @@
+
+
+OUTPUT_DIR: "outputs/" # 0.1* id loss + 0.1*ood loss + EMA更新特征 + 更新域标签 + thresh 0.8
+
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+MAX_EPOCH: 300
+TRAIN_STEP: 500 # 
+ALGORITHM:
+  NAME: "MOOD"
+  CONFIDENCE_THRESHOLD: 0.95
+  MOOD:
+    NUM_AUG: 2
+    TEMPERATURE: 0.5 # ?
+    MIXUP_ALPHA: 0.5  
+    FEATURE_LOSS_TEMPERATURE: 0.5
+    PAP_LOSS_WEIGHT: 0.2
+  ABLATION: 
+    ENABLE: False
+    DUAL_BRANCH: False
+    MIXUP: False     
+    OOD_DETECTION: False 
+    PAP_LOSS: False
+
+  PRE_TRAIN: 
+    ENABLE: True
+    WARMUP_EPOCH: 100
+    SimCLR: 
+      ENABLE: True
+      TEMPERATURE: 0.5
+    OOD_DETECTOR:
+      TEMPERATURE: 0.5
+      MAGNITUDE: 0.0014 #  
+      THRESHOLD: 0.10004
+      DOMAIN_Y_UPDATE_ITER: 5
+      K: 50 # 'Top k most similar images used to predict the label' 
+    
+MODEL:
+  NAME:   "Resnet34"  #"WRN_28_2" #  "Resnet50" #
+  LOSS:
+    FEATURE_LOSS:
+      TEMPERATURE: 0.5 
+      CENTER_DECAY_RATIO: 0.9
+
+DATASET:
+  NAME: "svhn"
+  ROOT: "./data/svhn" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]
+  IFS: [100]
+  OODRS: [0.25]  
+  DOMAIN_DATASET_RETURN_INDEX: True
+  UNLABELED_DATASET_RETURN_INDEX: True
+  LABELED_DATASET_RETURN_INDEX: True
+  DL:
+    NUM_LABELED_HEAD: 1500
+    IMB_FACTOR_L: 10
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 3000
+      IMB_FACTOR_UL: 10
+      REVERSE_UL_DISTRIBUTION: False
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.75 #  
+    
+    UNLABELED_BATCH_RATIO: 2
+  BATCH_SIZE: 64
+  NUM_WORKERS: 8
+  
+  DUAL_SAMPLER:
+    ENABLE: True
+    NAME: "ClassReversedSampler"  
+  
+  TRANSFORM:
+    UNLABELED_STRONG_AUG: True
+    LABELED_STRONG_AUG: True 
+
+RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/svhn/MOOD/Resnet34/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-r-0.25/models/checkpoint.pth'
