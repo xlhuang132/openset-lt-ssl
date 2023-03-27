@@ -12,7 +12,7 @@ class PCSSLTrainer(BaseTrainer):
         
         self.losses_p = AverageMeter()
         self.lambda_p=cfg.ALGORITHM.PCSSL.LAMBDA_P
-        
+        self.temperature=cfg.ALGORITHM.PCSSL.TEMPERATURE
       
         if self.cfg.RESUME !="":
             self.load_checkpoint(self.cfg.RESUME)  
@@ -97,21 +97,7 @@ class PCSSLTrainer(BaseTrainer):
         self.losses = AverageMeter()
         self.losses_x = AverageMeter()
         self.losses_u = AverageMeter() 
-        self.losses_p = AverageMeter()
-   
-        
-    # def operate_after_epoch(self): 
-    #     if self.iter<=self.warmup_iter:            
-    #         self.detect_ood()
-    #     if self.iter==self.warmup_iter:
-    #         self.save_checkpoint(file_name="warmup_model.pth")
-    #         self._rebuild_models()
-    #         self._rebuild_optimizer(self.model)
-    #     ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
-    #     id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
-    #     self.logger.info("== ood_prec:{:>5.3f} ood_rec:{:>5.3f} id_prec:{:>5.3f} id_rec:{:>5.3f}".\
-    #         format(ood_pre*100,ood_rec*100,id_pre*100,id_rec*100))
-    #     self.logger.info('=='*40)    
+        self.losses_p = AverageMeter() 
          
             
    

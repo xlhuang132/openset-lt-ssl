@@ -96,6 +96,26 @@ def NT_xent(similarity_matrix):
 
     return NT_xent_loss_total
 
+def pairwise_partial_similarity(outputs_1, outputs_2,temperature=0.5):
+    '''
+        Compute pairwise similarity and return the matrix
+        input: aggregated outputs & temperature for scaling
+        return: pairwise cosine similarity
+    '''  
+    outputs=torch.cat((outputs_1,outputs_2),dim=0)
+    B   = outputs.shape[0]
+    cover=get_random_cover(outputs.shape[0],outputs.shape[1])
+    outputs= outputs*(cover)
+    outputs_norm = outputs/(outputs.norm(dim=1).view(B,1) + 1e-8)
+    similarity_matrix = (1./temperature) * torch.mm(outputs_norm,outputs_norm.transpose(0,1))
+    return similarity_matrix
+
+def get_random_cover(bs,d):
+    rcover= np.random.randint(0,2,d)
+    cover=torch.tensor(rcover).cuda() 
+    # cover= cover.repeat(bs,1).cuda()
+    return cover
+
 def SCL(similarity_matrix,mask):
     '''
         Compute class-wise contrastive loss

@@ -12,6 +12,7 @@ from .dcssl_trainer import DCSSLTrainer
 from .ccssl_trainer import CCSSLTrainer
 from .mtcf_trainer import MTCFTrainer
 from .acssl_trainer import ACSSLTrainer
+from .pcssl_trainer import PCSSLTrainer
 def build_trainer(cfg):
     alg=cfg.ALGORITHM.NAME
     if alg=='MOOD':
@@ -31,13 +32,16 @@ def build_trainer(cfg):
     elif alg=='OpenMatch':
         return OpenMatchTrainer(cfg)
     elif alg=='MTCF':
-        return MTCFTrainer(cfg)
-    elif alg== 'DCSSL':
-        return DCSSLTrainer(cfg)    
+        return MTCFTrainer(cfg) 
     elif alg== 'CCSSL':
         return CCSSLTrainer(cfg) 
+    # HXL
+    elif alg== 'DCSSL':
+        return DCSSLTrainer(cfg)   
     elif alg== 'ACSSL':
         return ACSSLTrainer(cfg) 
+    elif alg== 'PCSSL':
+        return PCSSLTrainer(cfg) 
     
     else:
         raise "The algorithm type is not valid!"
