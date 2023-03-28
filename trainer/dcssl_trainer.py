@@ -352,6 +352,7 @@ class DCSSLTrainer(BaseTrainer):
         if return_class_acc:
             return val_acc,test_acc,test_class_acc
         return [val_acc,test_acc]
+    
     def get_pos_neg_weight(self,biased_encodings,target_x,pred):
         # 求个cosine相似度
         yy=torch.cat([target_x,pred,pred],dim=0)

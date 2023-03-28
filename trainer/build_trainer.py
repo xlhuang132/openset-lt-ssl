@@ -13,6 +13,9 @@ from .ccssl_trainer import CCSSLTrainer
 from .mtcf_trainer import MTCFTrainer
 from .acssl_trainer import ACSSLTrainer
 from .pcssl_trainer import PCSSLTrainer
+from .ressl_trainer import ReSSLTrainer
+from .fixmatchbcl_trainer import FixMatchBCLTrainer
+
 def build_trainer(cfg):
     alg=cfg.ALGORITHM.NAME
     if alg=='MOOD':
@@ -21,6 +24,8 @@ def build_trainer(cfg):
         return SupervisedTrainer(cfg)
     elif alg=='FixMatch':
         return FixMatchTrainer(cfg)
+    elif alg=='FixMatchBCLTrainer':
+        return FixMatchBCLTrainer(cfg)
     elif alg=='MixMatch':
         return MixMatchTrainer(cfg)
     elif alg=='CReST':
@@ -42,6 +47,7 @@ def build_trainer(cfg):
         return ACSSLTrainer(cfg) 
     elif alg== 'PCSSL':
         return PCSSLTrainer(cfg) 
-    
+    elif alg== 'ReSSL':
+        return ReSSLTrainer(cfg) 
     else:
         raise "The algorithm type is not valid!"

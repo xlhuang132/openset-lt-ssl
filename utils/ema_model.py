@@ -45,11 +45,11 @@ class EMAModel(nn.Module):
             if isinstance(m, (nn.Conv2d, nn.Linear)):
                 m.weight.data *= (1.0 - current_lr * self.ema_weight_decay)
 
-    def forward(self, x, return_encoding=False, **kwargs):
+    def forward(self, x, return_encoding=False,return_projected_feature=False, **kwargs):
         # if return_encoding:
         #     return self.ema_model.encoder(x)
         # return self.ema_model(x, **kwargs)
-        return self.ema_model(x,return_encoding=return_encoding)
+        return self.ema_model(x,return_encoding=return_encoding,return_projected_feature=return_projected_feature)
 
     def train(self):
         self.ema_model.train()

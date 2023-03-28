@@ -5,6 +5,7 @@ from .stl10 import get_stl10
 from .build_transform import build_transform
 from dataset.ood_dataset_map import ood_dataset_map
 from dataset.ood_dataset import OOD_Dataset
+from .imagenet import get_imagenet_ssl_dataset
 
 def build_test_dataset(cfg):
     dataset_name=cfg.DATASET.NAME
@@ -58,6 +59,12 @@ def build_dataset(cfg,logger=None,test_mode=False):
         datasets=get_svhn(dataset_root,  ood_dataset, ood_ratio=ood_ratio, 
                  transform_train=transform_train, transform_train_ul=transform_train_ul, transform_val=transform_val,
                  download=True,cfg=cfg,logger=logger,test_mode=test_mode)
+    elif dataset_name=='semiimagenet':
+        
+        percent=cfg.DATASET.IMAGENET.PERCENT, 
+        datasets=get_imagenet_ssl_dataset(dataset_root,percent, 
+                 transform_train, transform_train_ul, transform_val,
+                 cfg=cfg,logger=logger)
     else:
         raise "Dataset is not valid!"
     

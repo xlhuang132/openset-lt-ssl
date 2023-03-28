@@ -15,13 +15,14 @@ ALGORITHM:
 
 
 MODEL:
-  NAME: "WRN_28_2" 
+  NAME: "WRN_28_8" 
    
 DATASET:
   NAME: "cifar100"
   ROOT: "./data/cifar100" 
   NUM_CLASSES: 100
   GROUP_SPLITS: [30,35,35]
+  BATCH_SIZE: 16
   IFS: [100]
   OODRS: [0.0]  
   NUM_VALID: 0
@@ -38,6 +39,5 @@ DATASET:
       DATASET: 'TIN' #'TIN'
       INCLUDE_ALL: True
       RATIO: 0.0  
-     
   
  
