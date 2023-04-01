@@ -186,7 +186,7 @@ def WRN_28_8(cfg):
     fc2_out_dim=cfg.MODEL.DUAL_HEAD_OUT_DIM
     if fc2_out_dim==0:fc2_out_dim=None
     # if cfg.ALGORITHM.NAME=='DCSSL':
-    return WideResNet(num_classes,depth=28,widen_factor=8,fc2_enable=fc2_enable)
+    return WideResNet(num_classes,depth=28,widen_factor=8,fc2_enable=fc2_enable,fc2_out_dim=fc2_out_dim)
 
 def WRN_37_2(cfg):    
     num_classes=cfg.DATASET.NUM_CLASSES

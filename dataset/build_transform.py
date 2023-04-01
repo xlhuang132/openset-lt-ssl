@@ -172,7 +172,7 @@ def build_transform(cfg):
                 ),  # identity
             ]
         )
-    elif algo_name=='CCSSL':
+    elif algo_name in ['CCSSL','DCSSL']:
         ul_train = GeneralizedSSLTransform(
             [
                 aug(cfg, img_size, norm_params=norm_params, resolution=resolution),  # weak
@@ -194,31 +194,31 @@ def build_transform(cfg):
                 ),  # strong (randaugment)
             ]
         )
-    elif algo_name=='DCSSL':
-        contra_trans=build_simclr_transform(cfg)
-        ul_train = GeneralizedSSLTransform(
-            [
-                contra_trans,
-                # aug(cfg, img_size, norm_params=norm_params, resolution=resolution),  # weak
-                # aug(
-                #     cfg,
-                #     img_size,
-                #     strong_aug=True,
-                #     norm_params=norm_params,
-                #     resolution=resolution,
-                #     ra_first=True
-                # ),  # strong (randaugment) 
-                 aug(
-                    cfg,
-                    img_size,
-                    norm_params=norm_params,
-                    resolution=resolution,
-                    flip=False,
-                    crop=False
-                ),  # identity 用来计算biased
-            ]
-        )
-        l_train =ul_train
+    # elif algo_name=='DCSSL':
+    #     contra_trans=build_simclr_transform(cfg)
+    #     ul_train = GeneralizedSSLTransform(
+    #         [
+    #             contra_trans,
+    #             # aug(cfg, img_size, norm_params=norm_params, resolution=resolution),  # weak
+    #             # aug(
+    #             #     cfg,
+    #             #     img_size,
+    #             #     strong_aug=True,
+    #             #     norm_params=norm_params,
+    #             #     resolution=resolution,
+    #             #     ra_first=True
+    #             # ),  # strong (randaugment) 
+    #              aug(
+    #                 cfg,
+    #                 img_size,
+    #                 norm_params=norm_params,
+    #                 resolution=resolution,
+    #                 flip=False,
+    #                 crop=False
+    #             ),  # identity 用来计算biased
+    #         ]
+    #     )
+    #     l_train =ul_train
     else:
         ul_train = GeneralizedSSLTransform(
             [

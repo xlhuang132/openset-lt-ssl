@@ -1,10 +1,9 @@
 
 
-OUTPUT_DIR: "outputs/"
-SEED : 7
+OUTPUT_DIR: "outputs/" 
 SHOW_STEP: 100
 SAVE_EPOCH: 10
-MAX_EPOCH: 300
+MAX_EPOCH: 500
 TRAIN_STEP: 500 #  
 ALGORITHM:
   NAME: "OpenMatch"
@@ -16,22 +15,9 @@ ALGORITHM:
     START_FIX: 10
 
 MODEL:
-  NAME: "Resnet34"
-  
+  NAME: "WRN_28_8" # "Resnet34"  
   DUAL_HEAD_ENABLE: True   
   DUAL_HEAD_OUT_DIM: 200
-  LOSS:
-    LABELED_LOSS: "CrossEntropyLoss" 
-    WITH_LABELED_COST_SENSITIVE: False
-    UNLABELED_LOSS: "CrossEntropyLoss"
-    UNLABELED_LOSS_WEIGHT: 1.0
-    WITH_SUPPRESSED_CONSISTENCY: False  
-
-  OPTIMIZER:
-    TYPE: 'SGD'
-    BASE_LR: 0.03
-    MOMENTUM: 0.9
-    WEIGHT_DECAY: 2e-4
 
 DATASET:
   NAME: "cifar100"
@@ -39,22 +25,23 @@ DATASET:
   NUM_CLASSES: 100
   GROUP_SPLITS: [30,35,35]
   
-  NUM_WORKERS : 8
-  IMB_TYPE: 'exp'
+  IFS: [100]
+  OODRS: [0.0]  
+  
+  BATCH_SIZE: 16
   DL:
     NUM_LABELED_HEAD: 150
     IMB_FACTOR_L: 100
   DU:
     ID:
       NUM_UNLABELED_HEAD: 300 
-      IMB_FACTOR_UL: 100
-      REVERSE_UL_DISTRIBUTION: False
+      IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      DATASET: 'TIN'
+      # DATASET: 'TIN'
       RATIO: 0.0 # 
-    
-    UNLABELED_BATCH_RATIO: 2
+      INCLUDE_ALL: True
+     
  
   
  

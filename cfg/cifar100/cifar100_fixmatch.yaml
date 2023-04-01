@@ -6,20 +6,17 @@ SAVE_EPOCH: 10
 MAX_EPOCH: 500
 TRAIN_STEP: 500  
 ALGORITHM:
-  NAME: "FixMatch"
-  CONFIDENCE_THRESHOLD: 0.95 
-  BRANCH1_MIXUP: False  
-  BRANCH2_MIXUP: False  
+  NAME: "FixMatch" 
 
 MODEL:
-  NAME: "Resnet50" #"WRN_28_2" 
+  NAME: "WRN_28_8"  #"Resnet50" #"WRN_28_2" 
  
 DATASET:
   NAME: "cifar100"
   ROOT: "./data/cifar100" 
   NUM_CLASSES: 100
   GROUP_SPLITS: [30,35,35]
-   
+  BATCH_SIZE: 16
   IFS: [100]
   OODRS: [0.0]  
   DL:
@@ -33,8 +30,5 @@ DATASET:
       ENABLE: True
       # INCLUDE_ALL: True
       DATASET: 'TIN'
-      RATIO: 0.0 #    
- 
-  SAMPLER:
-    NAME: "RandomSampler"  
+      RATIO: 0.0 #     
  

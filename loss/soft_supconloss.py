@@ -23,9 +23,11 @@ class SoftSupConLoss(nn.Module):
         https://arxiv.org/pdf/2002.05709.pdf
         Args:
             features: hidden vector of shape [bsz, n_views, ...].
+            max_probs: confidenct
             labels: ground truth of shape [bsz].
             mask: contrastive mask of shape [bsz, bsz], mask_{i,j}=1 if sample j
                 has the same class as sample i. Can be asymmetric.
+            select_matrix: the positive pairs with high confidence
         Returns:
             A loss scalar.
         """

@@ -137,9 +137,6 @@ class ReSSLTrainer(BaseTrainer):
         self.losses_rc.update(loss_re_ctr.item(), inputs_u.size(0)) 
         self.losses.update(loss.item(),inputs_x.size(0))
         
-        if self.ema_enable:
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            ema_decay =self.ema_model.update(self.model, step=self.iter, current_lr=current_lr)
         if self.iter % self.cfg.SHOW_STEP==0:
         # if self.iter % 2==0:
             self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} Avg_Loss_rc:{:>5.4f} =='\
