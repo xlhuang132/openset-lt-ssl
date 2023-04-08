@@ -66,7 +66,6 @@ class MixMatchTrainer(BaseTrainer):
             targets_u = pt / pt.sum(dim=1, keepdim=True)
             targets_u = targets_u.detach()
             
-        
         # mixup
         bin_labels = F.one_hot(targets_x, num_classes=targets_u.size(1)).float()
         all_inputs = torch.cat([inputs_x, inputs_u, inputs_u2], dim=0)

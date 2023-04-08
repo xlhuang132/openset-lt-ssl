@@ -12,8 +12,8 @@ ALGORITHM:
     CONTRAST_THRESH: 0.9
     TEMPERATURE: 0.07
     LAMBDA_C: 0.2
-    CONTRAST_LEFT_OUT: True
-    CONTRAST_WITH_SOFTLABEL: False
+    CONTRAST_LEFT_OUT: False
+    CONTRAST_WITH_SOFTLABEL: True
     CONTRAST_WITH_THRESH: True
 
 
@@ -25,21 +25,17 @@ DATASET:
   ROOT: "./data/cifar10" 
   NUM_CLASSES: 10
   GROUP_SPLITS: [3,3,4]
-  IFS: [1]
+  IFS: [100]
   OODRS: [0.0]  
   DL:
-    NUM_LABELED_HEAD: 372 # 1500
+    NUM_LABELED_HEAD:  1500 #372 #
     # IMB_FACTOR_L: 100
   DU:
     ID:
-      NUM_UNLABELED_HEAD: 744 #3000
+      NUM_UNLABELED_HEAD: 3000 #744 #
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
       INCLUDE_ALL: True
-      DATASET: 'TIN' #'TIN'
+      DATASET: 'TIN'  
       RATIO: 0.0  
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/CCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/CCSSL/WRN_28_2/DL-40-IF-1.0-DU4460-IF_U-1.0/OOD-TIN-r-0.00/models/checkpoint.pth'
-# RESUME : '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/CCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-r-0.00/models/checkpoint.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/CCSSL/Resnet50/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/models/checkpoint.pth'

@@ -255,6 +255,8 @@ def get_root_path(cfg,dataset=None,algorithm=None,labeled_loss_type=None,
         path=os.path.join(path,file_name)
     if cfg.ALGORITHM.NAME=='MOOD' and cfg.SEED_PATH_ENABLE:
         path=os.path.join(path,'SEED_{}'.format(cfg.SEED))
+    if cfg.ALGORITHM.NAME=='DCSSL':
+        path=os.path.join(path,'v_{}'.format(cfg.ALGORITHM.DCSSL.LOSS_VERSION))
     return path 
 
 def prepare_output_path(cfg,logger):

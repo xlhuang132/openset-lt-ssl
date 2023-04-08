@@ -59,7 +59,8 @@ class OpenMatchTrainer(BaseTrainer):
         self.start_fix=cfg.ALGORITHM.OPENMATCH.START_FIX
         self.unlabeled_all_trainloader=copy.deepcopy(self.unlabeled_trainloader)
         self.unlabeled_all_trainloader_iter=iter(self.unlabeled_all_trainloader)
-        
+        if self.cfg.RESUME !="":
+            self.load_checkpoint(self.cfg.RESUME)  
         
         
     def loss_init(self):

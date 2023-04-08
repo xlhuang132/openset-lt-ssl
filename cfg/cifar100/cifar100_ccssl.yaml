@@ -32,13 +32,12 @@ DATASET:
   DU:
     ID:
       NUM_UNLABELED_HEAD: 300
-      # IMB_FACTOR_UL: 100
-      REVERSE_UL_DISTRIBUTION: False
+      # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
       DATASET: 'TIN' #'TIN'
-      INCLUDE_ALL: True
+      # INCLUDE_ALL: True
       RATIO: 0.0  
 
-RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/CCSSL/WRN_28_8/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/CCSSL/WRN_28_8/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
  

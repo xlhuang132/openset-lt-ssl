@@ -8,7 +8,7 @@ TRAIN_STEP: 500
 ALGORITHM:
   NAME: "MixMatch"    
 MODEL:
-  NAME:  "WRN_28_2" # "Resnet34" #"Resnet50" # 
+  NAME:  "WRN_28_8" # "Resnet34" #"Resnet50" # 
   LOSS:
     LABELED_LOSS: "MixmatchLoss"   
  
@@ -16,6 +16,9 @@ DATASET:
   NAME: "cifar100"
   ROOT: "./data/cifar100" 
   NUM_CLASSES: 100
+  BATCH_SIZE: 16
+  NUM_WORKERS: 4
+
   GROUP_SPLITS: [30,35,35]
   IFS: [100]
   OODRS: [0.0]  
@@ -28,8 +31,8 @@ DATASET:
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      INCLUDE_ALL: True
+      # INCLUDE_ALL: True
       DATASET: 'TIN'
       RATIO: 0.0    
  
-RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/MixMatch/WRN_28_2/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/MixMatch/WRN_28_2/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/models/checkpoint.pth'

@@ -36,9 +36,9 @@ class CCSSLTrainer(BaseTrainer):
         self.temperature=cfg.ALGORITHM.CCSSL.TEMPERATURE
         self.loss_contrast=SoftSupConLoss(temperature=self.temperature)
         
-        self.contrast_left_out=cfg.ALGORITHM.CCSSL.CONTRAST_LEFT_OUT
-        self.contrast_with_softlabel=cfg.ALGORITHM.CCSSL.CONTRAST_WITH_SOFTLABEL 
-        self.contrast_with_thresh=cfg.ALGORITHM.CCSSL.CONTRAST_WITH_THRESH
+        # self.contrast_left_out=cfg.ALGORITHM.CCSSL.CONTRAST_LEFT_OUT
+        # self.contrast_with_softlabel=cfg.ALGORITHM.CCSSL.CONTRAST_WITH_SOFTLABEL 
+        # self.contrast_with_thresh=cfg.ALGORITHM.CCSSL.CONTRAST_WITH_THRESH
         
         if cfg.RESUME!='':
             self.load_checkpoint(cfg.RESUME)
@@ -113,17 +113,17 @@ class CCSSLTrainer(BaseTrainer):
         features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1) #torch.Size([128, 2, 64])
         # In case of early training stage, pseudo labels have low scores
         if labels.shape[0] != 0:
-            if self.contrast_with_softlabel:
-                select_matrix = None
-                if self.contrast_left_out:
-                    with torch.no_grad():
-                        select_matrix = self.contrast_left_out(max_probs)
-                    Lcontrast = self.loss_contrast(features,
-                                                   max_probs,
-                                                   labels,
-                                                   select_matrix=select_matrix)
+            # if self.contrast_with_softlabel:
+            #     select_matrix = None
+            #     if self.contrast_left_out:
+            #         with torch.no_grad():
+            #             select_matrix = self.contrast_left_out(max_probs)
+            #         Lcontrast = self.loss_contrast(features,
+            #                                        max_probs,
+            #                                        labels,
+            #                                        select_matrix=select_matrix)
 
-                elif self.contrast_with_thresh:
+            #     elif self.contrast_with_thresh:
                     contrast_mask = max_probs.ge(
                         self.contrast_with_thresh).float()
                     # ================== feature norm =============== 
@@ -134,20 +134,20 @@ class CCSSLTrainer(BaseTrainer):
                                                    reduction=None) #torch.Size([2, 128])
                     Lcontrast = (Lcontrast * contrast_mask).mean()
 
-                else:
-                    Lcontrast = self.loss_contrast(features, max_probs, labels)
-            else:
-                if self.contrast_left_out:
-                    with torch.no_grad():
-                        select_matrix = self.contrast_left_out_p(max_probs)
-                    Lcontrast = self.loss_contrast(features,
-                                                   labels,
-                                                   select_matrix=select_matrix)
-                else:
-                    Lcontrast = self.loss_contrast(features, labels)
+        #         else:
+        #             Lcontrast = self.loss_contrast(features, max_probs, labels)
+        #     else:
+        #         if self.contrast_left_out:
+        #             with torch.no_grad():
+        #                 select_matrix = self.contrast_left_out_p(max_probs)
+        #             Lcontrast = self.loss_contrast(features,
+        #                                            labels,
+        #                                            select_matrix=select_matrix)
+        #         else:
+        #             Lcontrast = self.loss_contrast(features, labels)
 
-        else:
-            Lcontrast = sum(features.view(-1, 1)) * 0
+        # else:
+        #     Lcontrast = sum(features.view(-1, 1)) * 0
         loss=loss_cls+loss_cons+self.lambda_c*Lcontrast
         
         self.optimizer.zero_grad()

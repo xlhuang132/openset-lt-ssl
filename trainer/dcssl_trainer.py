@@ -40,7 +40,8 @@ class DCSSLTrainer(BaseTrainer):
         self.debiased_contra_temperture=cfg.ALGORITHM.DCSSL.DCSSL_CONTRA_TEMPERTURE
         self.biased_fusion_matrix=FusionMatrix(self.num_classes)
         
-        self.loss_contrast= SoftSupConLoss(temperature=self.debiased_contra_temperture) #DebiasSoftConLoss(temperature=self.debiased_contra_temperture)
+        self.loss_contrast= DebiasSoftConLoss(temperature=self.debiased_contra_temperture)
+        # SoftSupConLoss(temperature=self.debiased_contra_temperture) #DebiasSoftConLoss(temperature=self.debiased_contra_temperture)
         # self.logger.info("SimCLR contrastive loss")
         self.contrast_with_thresh=cfg.ALGORITHM.DCSSL.CONTRAST_THRESH
         self.contrast_with_hp=cfg.ALGORITHM.DCSSL.CONTRAST_WITH_HP
@@ -52,8 +53,13 @@ class DCSSLTrainer(BaseTrainer):
         self.biased_model=self.build_model(cfg).cuda()
         self.biased_optimizer=self.build_optimizer(cfg, self.biased_model) 
         # self.ema_model=self.ema_model.cuda()
+        self.mixup_alpha=0.5
+        self.sharpen_temp=0.5
         self.gce_loss=GeneralizedCELoss()
         self.fp_k=cfg.ALGORITHM.DCSSL.FP_K
+        self.loss_version=self.cfg.ALGORITHM.DCSSL.LOSS_VERSION
+        self.logger.info('contrastive loss version {}'.format(self.loss_version))
+        
         if cfg.RESUME!='':
             self.load_checkpoint(cfg.RESUME)
     
@@ -134,26 +140,14 @@ class DCSSLTrainer(BaseTrainer):
     def train_debiased_step(self,data_x,data_u):
         self.model.train()
         loss =0 
-        try:        
-            data_x = self.labeled_train_iter.next() 
-        except:
-            self.labeled_train_iter=iter(self.labeled_trainloader)
-            data_x = self.labeled_train_iter.next() 
-        
         
         inputs_x=data_x[0] 
         targets_x=data_x[1]
         
         # DU   
-        try:       
-            data_u = self.unlabeled_train_iter.next()
-        except:
-            self.unlabeled_train_iter=iter(self.unlabeled_trainloader)
-            data_u = self.unlabeled_train_iter.next()
         inputs_u_w=data_u[0][0]
         inputs_u_s=data_u[0][1]
         inputs_u_s1=data_u[0][2]
-        
         
         inputs = torch.cat(
                 [inputs_x, inputs_u_w, inputs_u_s, inputs_u_s1],
@@ -191,25 +185,106 @@ class DCSSLTrainer(BaseTrainer):
         # 3. ctr loss
         # === biased_contrastive_loss
         # for supervised contrastive
+        
         labels = pred_class 
         features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1) #torch.Size([128, 2, 64])
         # In case of early training stage, pseudo labels have low scores 
         
-        # 1. 高置信度正样本
-        # contrast_mask = max_probs.ge(
-        #             self.contrast_with_thresh).float()
-        # loss_d_ctr = self.loss_contrast(features, # projected_feature
-        #                                         max_probs, # confidence
-        #                                         labels, # pred_class
-        #                                         reduction=None) #torch.Size([2, 128])
-        # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        # 0. 实例对比学习
+        if self.loss_version==0:
+            loss_d_ctr = self.loss_contrast(features)   
+        elif self.loss_version==1:
+        # # 1. 高置信度正样本+pi*pj ccssl
+            contrast_mask = max_probs.ge(
+                        self.contrast_with_thresh).float()
+            loss_d_ctr = self.loss_contrast(features, # projected_feature
+                                            max_probs=max_probs, # confidence
+                                            labels=labels, # pred_class
+                                            reduction=None) #torch.Size([2, 128])
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        elif self.loss_version==2:
+        # 2. 选择高置信度的样本对作为正对 + pi*pj
+            contrast_mask = max_probs.ge(
+                        self.contrast_with_thresh).float()
+            with torch.no_grad():
+                select_matrix = self.contrast_left_out_p(max_probs)
+            loss_d_ctr = self.loss_contrast(features,
+                                            max_probs=max_probs,
+                                            labels=labels,
+                                            reduction=None,
+                                            select_matrix=select_matrix)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        elif self.loss_version==3:
+        # 3. pos weight + neg weight 
+            contrast_mask = max_probs.ge(
+                        self.contrast_with_thresh).float()
+            with torch.no_grad():
+                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                pos_mask = torch.from_numpy(cos_sim).cuda()
+                mask= torch.eq(labels, labels.T).float().cuda()
+                mask=pos_mask*mask+(1-pos_mask)*(1-mask)
+            loss_d_ctr = self.loss_contrast(features,
+                                            # max_probs=max_probs,
+                                            labels=labels,
+                                            mask=mask,
+                                            reduction=None)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
         
-        # 2. 选择高置信度的样本对作为正对
-        with torch.no_grad():
-            select_matrix = self.contrast_left_out_p(max_probs)
-        loss_d_ctr = self.loss_contrast(features,
-                                        labels,
-                                        select_matrix=select_matrix)
+        # 4. 样本软加权 qi*去偏对比损失
+        elif self.loss_version==4:
+            contrast_mask = max_probs.ge(
+                        self.contrast_with_thresh).float()
+            contrast_mask*=max_probs
+            with torch.no_grad():
+                biased_feat=self.biased_model(inputs[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)],return_encoding=True)
+                cos_sim= 1 - cosine_similarity(biased_feat.detach().cpu().numpy())
+                mask = torch.from_numpy(cos_sim).cuda() 
+            loss_d_ctr = self.loss_contrast(features,
+                                            # max_probs=max_probs,
+                                            labels=labels,
+                                            mask=mask,
+                                            reduction=None)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+        elif self.loss_version==5:
+        # 5. 直接使用高维特征计算相似度
+            contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+            contrast_mask*=max_probs
+            with torch.no_grad(): 
+                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                mask = torch.from_numpy(cos_sim).cuda()
+            loss_d_ctr = self.loss_contrast(features, 
+                                            labels=labels,
+                                            mask=mask,
+                                            reduction=None)
+            
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+        elif self.loss_version==6:
+        # # 6. 直接使用高维特征计算相似度 +  使用所有样本加权qi
+            contrast_mask=max_probs
+            with torch.no_grad(): 
+                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                mask = torch.from_numpy(cos_sim).cuda()
+            loss_d_ctr = self.loss_contrast(features, 
+                                            labels=labels,
+                                            mask=mask,
+                                            reduction=None)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+        elif self.loss_version==7:
+        # 7. 直接使用低维特征计算相似度 +  使用所有样本加权qi
+            contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+            contrast_mask*=max_probs
+            with torch.no_grad(): 
+                cos_sim= 1 - cosine_similarity(f_u_s1.detach().cpu().numpy())
+                mask = torch.from_numpy(cos_sim).cuda()
+            loss_d_ctr = self.loss_contrast(features, 
+                                            labels=labels,
+                                            mask=mask,
+                                            reduction=None)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
         loss=loss_cls+loss_cons+self.lambda_d*loss_d_ctr
         
         self.optimizer.zero_grad()
@@ -227,6 +302,169 @@ class DCSSLTrainer(BaseTrainer):
                         self.losses.avg,self.losses_x.avg,self.losses_u.avg,self.losses_d_ctr.avg))
              
         return now_result.cpu().numpy(), targets_x.cpu().numpy()
+    
+    # def get_mixed_feat(self,feat,pred_class,extra_feat=None):
+    #     l = np.random.beta(self.mixup_alpha, self.mixup_alpha) 
+    #     l = max(l, 1-l)
+    #     idx = torch.randperm(feat.size(0))
+
+    #     input_a, input_b = feat, feat[idx]
+    #     target_a, target_b = pred_class, pred_class[idx]
+
+    #     mixed_input = l * input_a + (1 - l) * input_b
+    #     mixed_target = l * target_a + (1 - l) * target_b
+    #     if extra_feat is not None:
+    #         extra_a, extra_b = extra_feat, extra_feat[idx]
+    #         mixed_extra_input = l * extra_a + (1 - l) * extra_b
+    #         return mixed_input,mixed_target,mixed_extra_input
+    #     return mixed_input,mixed_target
+    
+    # def train_debiased_step_v8(self,data_x,data_u):
+    #     self.model.train()
+    #     loss =0 
+    
+    #     inputs_x_w=data_x[0][0] 
+    #     inputs_x_s=data_x[0][1] 
+    #     targets_x=data_x[1]
+        
+    #     inputs_u_w=data_u[0][0]
+    #     inputs_u_s=data_u[0][1]
+        
+    #     inputs = torch.cat(
+    #             [inputs_x_w,inputs_x_s, inputs_u_w,inputs_u_s],
+    #             dim=0).cuda()
+        
+    #     targets_x=targets_x.long().cuda()
+        
+    #     batch_size=targets_x.size(0)
+        
+    #     encoding = self.model(inputs,return_encoding=True)
+    #     features=self.model(encoding,return_projected_feature=True)
+    #     logits=self.model(encoding.detach(),classifier=True) 
+        
+    #     with torch.no_grad():
+           
+    #         bin_labels = F.one_hot(targets_x, num_classes=self.num_classes).float() 
+    #         l_encoding_w,l_encoding_s=encoding[:batch_size*2].detach().chunk(2)
+    #         mixed_w_feat,mixed_label,mixed_s_feat=self.get_mixed_feat( l_encoding_w, bin_labels,extra_feat=l_encoding_s)
+
+    #     # 1. mixed ce loss          
+        
+    #     mixed_w_logits=self.model(mixed_w_feat,classifier=True)         
+    #     mixed_s_logits=self.model(mixed_s_feat,classifier=True)         
+    #     loss_cls = -torch.mean(torch.sum((F.log_softmax(mixed_w_logits, dim=1)+F.log_softmax(mixed_s_logits, dim=1))*0.5 * mixed_label, dim=1))
+         
+    #     # 2. cons loss 
+    #     logits_u_w,logits_u_s=logits[2*batch_size:].chunk(2)         
+    #     with torch.no_grad(): 
+    #         probs_w = torch.softmax(logits_u_w.detach(), dim=-1)
+    #         max_probs, pred_class = torch.max(probs_w, dim=-1)             
+    #     loss_weight = max_probs.ge(self.conf_thres).float()  
+    #     loss_cons = self.ul_criterion(logits_u_s, pred_class, weight=loss_weight, avg_factor=logits_u_w.size(0))
+        
+    #     # 3. ctr loss
+    #     # === biased_contrastive_loss
+    #     # for supervised contrastive
+    #     l_feat_w,l_feat_s=features[:2*batch_size].chunk(2)
+    #     u_feat_w,u_feat_s=features[2*batch_size:].chunk(2)
+    #     f_u_w=torch.cat([l_feat_w,u_feat_w],dim=0)
+    #     f_u_s=torch.cat([l_feat_s,u_feat_s],dim=0)
+        
+    #     labels = torch.cat([targets_x,pred_class],dim=0)   
+    #     features = torch.cat([f_u_w.unsqueeze(1), f_u_s.unsqueeze(1)], dim=1) #torch.Size([128, 2, 64])
+    #     contrast_mask = torch.cat([torch.ones(batch_size).cuda(),max_probs.ge(self.contrast_with_thresh).float()],dim=0)  
+    #     max_probs=torch.cat([torch.ones(batch_size).cuda(),max_probs],dim=0)
+    #     loss_d_ctr = self.loss_contrast(features, # projected_feature
+    #                                     max_probs=max_probs, # confidence
+    #                                     labels=labels, # pred_class
+    #                                     reduction=None) #torch.Size([2, 128])
+    #     loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+    #     # 2. 选择高置信度的样本对作为正对
+    #     # with torch.no_grad():
+    #     #     select_matrix = self.contrast_left_out_p(max_probs)
+    #     # loss_d_ctr = self.loss_contrast(features,
+    #     #                                 labels=labels,
+    #     #                                 select_matrix=select_matrix)
+    #     # 3. debiased pos weight
+    #     # contrast_mask = max_probs.ge(
+    #     #             self.contrast_with_thresh).float()
+    #     # with torch.no_grad():
+    #     #     biased_feat=self.biased_model(inputs[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)],return_encoding=True)
+    #     #     cos_sim= 1 - cosine_similarity(biased_feat.detach().cpu().numpy())
+    #     #     mask = torch.from_numpy(cos_sim).cuda()
+    #     # loss_d_ctr = self.loss_contrast(features,
+    #     #                                 # max_probs=max_probs,
+    #     #                                 labels=labels,
+    #     #                                 mask=mask,
+    #     #                                 reduction=None)
+        
+    #     # 4. 样本软加权 qi*去偏对比损失
+    #     # contrast_mask = max_probs.ge(
+    #     #             self.contrast_with_thresh).float()
+    #     # contrast_mask*=max_probs
+    #     # with torch.no_grad():
+    #     #     biased_feat=self.biased_model(inputs[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)],return_encoding=True)
+    #     #     cos_sim= 1 - cosine_similarity(biased_feat.detach().cpu().numpy())
+    #     #     mask = torch.from_numpy(cos_sim).cuda() 
+    #     # loss_d_ctr = self.loss_contrast(features,
+    #     #                                 # max_probs=max_probs,
+    #     #                                 labels=labels,
+    #     #                                 mask=mask,
+    #     #                                 reduction=None)
+    #     # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+    #     # # 5. 直接使用高维特征计算相似度
+    #     # contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+    #     # contrast_mask*=max_probs
+    #     # with torch.no_grad(): 
+    #     #     cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+    #     #     mask = torch.from_numpy(cos_sim).cuda()
+    #     # loss_d_ctr = self.loss_contrast(features, 
+    #     #                                 labels=labels,
+    #     #                                 mask=mask,
+    #     #                                 reduction=None)
+        
+    #     # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+    #     # # 6. 直接使用高维特征计算相似度 +  使用所有样本加权qi
+    #     # contrast_mask=max_probs
+    #     # with torch.no_grad(): 
+    #     #     cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+    #     #     mask = torch.from_numpy(cos_sim).cuda()
+    #     # loss_d_ctr = self.loss_contrast(features, 
+    #     #                                 labels=labels,
+    #     #                                 mask=mask,
+    #     #                                 reduction=None)
+    #     # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+    #     # 7. 直接使用低维特征计算相似度 +  使用所有样本加权qi
+    #     # contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+    #     # contrast_mask=max_probs
+    #     # with torch.no_grad(): 
+    #     #     cos_sim= 1 - cosine_similarity(f_u_s1.detach().cpu().numpy())
+    #     #     mask = torch.from_numpy(cos_sim).cuda()
+    #     # loss_d_ctr = self.loss_contrast(features, 
+    #     #                                 labels=labels,
+    #     #                                 mask=mask,
+    #     #                                 reduction=None)
+    #     # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+        
+    #     loss=loss_cls+loss_cons+self.lambda_d*loss_d_ctr
+        
+    #     self.optimizer.zero_grad()
+    #     loss.backward()
+    #     self.optimizer.step() 
+    #     self.losses_d_ctr.update(loss_d_ctr.item(),labels.shape[0]) 
+    #     self.losses_x.update(loss_cls.item(), mixed_label.size(0))
+    #     self.losses_u.update(loss_cons.item(), logits_u_w.size(0)) 
+    #     self.losses.update(loss.item(),inputs_x_w.size(0))
+        
+    #     if self.iter % self.cfg.SHOW_STEP==0:
+    #         self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} Avg_Loss_c:{:>5.4f} =='\
+    #             .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,
+    #                     self.train_per_step,
+    #                     self.losses.avg,self.losses_x.avg,self.losses_u.avg,self.losses_d_ctr.avg))
+             
+    #     return 
     
     @torch.no_grad()
     def _momentum_update_key_encoder(self):

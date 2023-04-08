@@ -9,7 +9,7 @@ TRAIN_STEP: 500 #
 ALGORITHM:
   NAME: "DCSSL" 
   DCSSL:  
-    LAMBDA_D: 1.
+    LAMBDA_D: 0.2
     DCSSL_CONTRA_TEMPERTURE: 0.07
     FP_K: 5
     CONTRAST_THRESH: 0.9
@@ -17,6 +17,7 @@ ALGORITHM:
     CONTRAST_WITH_THRESH: True
     CONTRAST_WITH_HP: True
     CONTRAST_WITH_HN: True
+    LOSS_VERSION: 3
 
 
 MODEL:
@@ -46,4 +47,5 @@ DATASET:
       INCLUDE_ALL: True
       DATASET: 'TIN'
       RATIO: 0.0     
+ 
 # RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/models/checkpoint.pth'

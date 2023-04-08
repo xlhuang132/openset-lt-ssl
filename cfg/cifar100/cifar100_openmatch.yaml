@@ -38,10 +38,8 @@ DATASET:
       IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      # DATASET: 'TIN'
+      DATASET: 'TIN'
       RATIO: 0.0 # 
-      INCLUDE_ALL: True
-     
- 
-  
+      # INCLUDE_ALL: True
+      
  
