@@ -18,6 +18,7 @@ ALGORITHM:
     CONTRAST_WITH_THRESH: True
     CONTRAST_WITH_HP: True
     CONTRAST_WITH_HN: True
+    LOSS_VERSION: 4
 
 MODEL:
   NAME:  "WRN_28_8"   
@@ -44,7 +45,7 @@ DATASET:
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      # INCLUDE_ALL: True
+      INCLUDE_ALL: True
       DATASET: 'TIN'
       RATIO: 0.0 #    
   

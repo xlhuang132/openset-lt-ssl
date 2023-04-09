@@ -230,17 +230,17 @@ class DCSSLTrainer(BaseTrainer):
                                             reduction=None)
             loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
         
-        # 4. 样本软加权 qi*去偏对比损失
+        # 4.  pos weight + neg weight + pi*pj
         elif self.loss_version==4:
             contrast_mask = max_probs.ge(
                         self.contrast_with_thresh).float()
-            contrast_mask*=max_probs
             with torch.no_grad():
-                biased_feat=self.biased_model(inputs[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)],return_encoding=True)
-                cos_sim= 1 - cosine_similarity(biased_feat.detach().cpu().numpy())
-                mask = torch.from_numpy(cos_sim).cuda() 
+                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                pos_mask = torch.from_numpy(cos_sim).cuda()
+                mask= torch.eq(labels, labels.T).float().cuda()
+                mask=(1+pos_mask)*mask+(2-pos_mask)*(1-mask)
             loss_d_ctr = self.loss_contrast(features,
-                                            # max_probs=max_probs,
+                                            max_probs=max_probs,  
                                             labels=labels,
                                             mask=mask,
                                             reduction=None)
@@ -284,7 +284,13 @@ class DCSSLTrainer(BaseTrainer):
                                             mask=mask,
                                             reduction=None)
             loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
+        elif self.loss_version==8: # 单纯的有监督对比
+            contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+            loss_d_ctr = self.loss_contrast(features, 
+                                            labels=labels, 
+                                            reduction=None)
+            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
         loss=loss_cls+loss_cons+self.lambda_d*loss_d_ctr
         
         self.optimizer.zero_grad()
