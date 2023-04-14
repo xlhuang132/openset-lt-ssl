@@ -1,0 +1,36 @@
+
+
+OUTPUT_DIR: "outputs/"
+
+SEED : 7
+GPU_MODE: True 
+ALGORITHM:
+  NAME: "baseline" 
+  CONFIDENCE_THRESHOLD: 0.95  
+MODEL:
+  NAME: "WRN_28_2"
+   
+DATASET:
+  NAME: "cifar10"
+  ROOT: "./data/cifar10" 
+  NUM_CLASSES: 10
+  GROUP_SPLITS: [3,3,4]  
+  IFS: [100]
+  OODRS: [0.0]  
+  DL:
+    NUM_LABELED_HEAD: 1500
+    # IMB_FACTOR_L: 100
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 3000
+      # IMB_FACTOR_UL: 100 
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'
+      RATIO: 0.0  
+      INCLUDE_ALL: True
+    
+     
+# ======= 画图分析 =======
+# 1 - 
+ANALYSE_TYPE: [1] 

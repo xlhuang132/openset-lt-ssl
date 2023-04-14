@@ -96,6 +96,7 @@ class BaseTrainer():
         self.warmup_enable=cfg.ALGORITHM.PRE_TRAIN.ENABLE
         self.l_num=len(self.labeled_trainloader.dataset)
         self.ul_num=len(self.unlabeled_trainloader.dataset)  
+        self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num
         self.id_masks=torch.zeros(self.ul_num).cuda()
         self.ood_masks=torch.zeros(self.ul_num).cuda() 
         self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE
@@ -600,7 +601,7 @@ class BaseTrainer():
                     'best_val_test': self.best_val_test,
                     'optimizer': self.optimizer.state_dict(), 
                     'id_masks':self.id_masks,
-                    'ood_masks':self.ood_masks,                   
+                    'ood_masks':self.ood_masks,                                        
                 },  os.path.join(self.model_dir, file_name))
         return 
     
@@ -646,6 +647,182 @@ class BaseTrainer():
             id_index=id_index.cpu().numpy()
             self.rebuild_unlabeled_dataset(id_index) 
      
+    def count_p_d(self):
+        dl_results=self.prepare_feat(self.test_labeled_trainloader,return_confidence=True)
+        du_results=self.prepare_feat(self.test_unlabeled_trainloader,return_confidence=True)
+        test_results=self.prepare_feat(self.test_loader,return_confidence=True)
+        
+        prototypes=self.get_prototypes(dl_results[0],dl_results[1])
+        
+        c1=dl_results[2][0]
+        p1=prototypes[dl_results[1]]
+        d1=torch.cosine_similarity(dl_results[0],p1,dim=-1)  
+        
+        c2=du_results[2][0]
+        p2=prototypes[du_results[2][1]]        
+        d2=torch.cosine_similarity(du_results[0],p2,dim=-1) 
+        
+        c=torch.cat([c1,c2],dim=0)
+        d=torch.cat([d1,d2],dim=0)
+        
+        train_dc=torch.zeros(11,11)
+        for i in range(c.shape[0]):
+            x,y=int(c[i].item()/0.1),int((d[i].item()+1)/0.2)
+            train_dc[x][y]+=1
+        train_dc=train_dc.numpy()
+        
+        test_dc=torch.zeros(11,11)
+        test_c=test_results[2][0]
+        test_p=prototypes[test_results[2][1]]  
+        test_d=torch.cosine_similarity(test_results[0],test_p,dim=-1) 
+        for i in range(test_c.shape[0]):
+            x,y=int(test_c[i].item()/0.1),int((test_d[i].item()+1)/0.2)
+            test_dc[x][y]+=1
+        test_dc=test_dc.numpy()
+        return  train_dc,test_dc
+    
+    def get_prototypes(self,feat,y):
+        prototypes=torch.zeros(self.num_classes,self.feature_dim)
+        for c in range(self.num_classes):
+            select_index= torch.nonzero(y == c, as_tuple=False).squeeze(1)
+            if select_index.shape[0]>0: 
+                prototypes[c] = feat[select_index].mean(dim=0) 
+        return prototypes
+         
+    def plot(self):
+        plot_group_acc_over_epoch(group_acc=self.train_group_accs,title="Train Group Average Accuracy",save_path=os.path.join(self.pic_dir,'train_group_acc.jpg'))
+        plot_group_acc_over_epoch(group_acc=self.val_group_accs,title="Val Group Average Accuracy",save_path=os.path.join(self.pic_dir,'val_group_acc.jpg'))
+        plot_group_acc_over_epoch(group_acc=self.test_group_accs,title="Test Group Average Accuracy",save_path=os.path.join(self.pic_dir,'test_group_acc.jpg'))
+        plot_acc_over_epoch(self.train_accs,title="Train average accuracy",save_path=os.path.join(self.pic_dir,'train_acc.jpg'),)
+        plot_acc_over_epoch(self.test_accs,title="Test average accuracy",save_path=os.path.join(self.pic_dir,'test_acc.jpg'),)
+        plot_acc_over_epoch(self.val_accs,title="Val average accuracy",save_path=os.path.join(self.pic_dir,'val_acc.jpg'),)
+        plot_loss_over_epoch(self.train_losses,title="Train Average Loss",save_path=os.path.join(self.pic_dir,'train_loss.jpg'))
+        plot_loss_over_epoch(self.val_losses,title="Val Average Loss",save_path=os.path.join(self.pic_dir,'val_loss.jpg'))
+        plot_loss_over_epoch(self.test_losses,title="Test Average Loss",save_path=os.path.join(self.pic_dir,'test_loss.jpg'))
+    
+    def get_class_counts(self,dataset):
+        """
+            Sort the class counts by class index in an increasing order
+            i.e., List[(2, 60), (0, 30), (1, 10)] -> np.array([30, 10, 60])
+        """
+        return np.array(dataset.num_per_cls_list)
+        # class_count = dataset.num_samples_per_class
+
+        # # sort with class indices in increasing order
+        # class_count.sort(key=lambda x: x[0])
+        # per_class_samples = np.asarray([float(v[1]) for v in class_count])
+        # return per_class_samples
+    
+    def get_label_dist(self, dataset=None, normalize=None):
+        """
+            normalize: ["sum", "max"]
+        """
+        if dataset is None:
+            dataset = self.labeled_trainloader.dataset
+
+        class_counts = torch.from_numpy(self.get_class_counts(dataset)).float()
+        class_counts = class_counts.cuda()
+
+        if normalize:
+            assert normalize in ["sum", "max"]
+            if normalize == "sum":
+                return class_counts / class_counts.sum()
+            if normalize == "max":
+                return class_counts / class_counts.max()
+        return class_counts
+
+    def build_labeled_loss(self, cfg , warmed_up=False)  :
+        loss_type = cfg.MODEL.LOSS.LABELED_LOSS
+        num_classes = cfg.MODEL.NUM_CLASSES
+        assert loss_type == "CrossEntropyLoss"
+
+        class_count = self.get_label_dist(device=self.device)
+        per_class_weights = None
+        if cfg.MODEL.LOSS.WITH_LABELED_COST_SENSITIVE and warmed_up:
+            loss_override = cfg.MODEL.LOSS.COST_SENSITIVE.LOSS_OVERRIDE
+            beta = cfg.MODEL.LOSS.COST_SENSITIVE.BETA
+            if beta < 1:
+                # effective number of samples;
+                effective_num = 1.0 - torch.pow(beta, class_count)
+                per_class_weights = (1.0 - beta) / effective_num
+            else:
+                per_class_weights = 1.0 / class_count
+
+            # sum to num_classes
+            per_class_weights = per_class_weights / torch.sum(per_class_weights) * num_classes
+
+            if loss_override == "":
+                # CE loss
+                loss_fn = build_loss(
+                    cfg, loss_type, class_count=class_count, class_weight=per_class_weights
+                )
+
+            elif loss_override == "LDAM":
+                # LDAM loss
+                loss_fn = build_loss(
+                    cfg, "LDAMLoss", class_count=class_count, class_weight=per_class_weights
+                )
+
+            else:
+                raise ValueError()
+        else:
+            loss_fn = build_loss(
+                cfg, loss_type, class_count=class_count, class_weight=per_class_weights
+            )
+
+        return loss_fn
+
+    def get_dl_embed_center(self):
+        model=self.get_val_model().eval()
+        emb = []
+        centers = [0 for c in range(self.num_classes)]
+        cnt = [0 for c in range(self.num_classes)]
+        with torch.no_grad():
+            for batch_idx,(inputs, targets, _) in enumerate(self.labeled_trainloader):
+                if len(inputs)==2 or len(inputs)==3:
+                    inputs=inputs[0]
+                inputs, targets = inputs.cuda(), targets.cuda()
+                outputs=self.model(inputs,return_encoding=True)
+                outputs=self.model(outputs,return_projected_feature=True)                
+                emb.append(outputs.cpu())
+                for ii in range(targets.size(0)):
+                    cnt[targets[ii].item()] = cnt[targets[ii].item()] + 1
+                    centers[targets[ii].item()] = centers[targets[ii].item()] + outputs[ii].cpu()
+        for c in range(self.num_classes):
+            centers[c] = (centers[c] / cnt[c]).unsqueeze(0)
+        centers = torch.cat(centers, dim=0)
+        emb = torch.cat(emb, dim=0)
+        return emb, centers   
+    
+    def prepare_feat(self,dataloader,return_confidence=False):
+        model=self.get_val_model().eval()
+        n=dataloader.dataset.total_num
+        feat=torch.zeros((n,self.feature_dim)) 
+        targets_y=torch.zeros(n).long()
+        confidence=torch.zeros(n)  
+        pred_y=torch.zeros(n).long()
+        with torch.no_grad():
+            for batch_idx,(inputs, targets, idx) in enumerate(dataloader):
+                if len(inputs)==2 or len(inputs)==3:
+                    inputs=inputs[0]
+                inputs, targets = inputs.cuda(), targets.cuda()
+                encoding=self.model(inputs,return_encoding=True)
+                outputs=self.model(encoding,return_projected_feature=True) 
+                logits=self.model(encoding,classifier=True)
+                probs = torch.softmax(logits.detach(), dim=-1) 
+                max_probs, pred_class = torch.max(probs, dim=-1)  
+                
+                feat[idx] =   outputs.cpu()  
+                targets_y[idx] = targets.cpu()                 
+                confidence[idx]=max_probs.cpu()
+                pred_y[idx]=pred_class.cpu()
+                
+        # feat=torch.cat(feat,dim=0)
+        # targets_y=torch.cat(targets_y,dim=0)
+        if return_confidence:
+            return feat,targets_y,[confidence,pred_y]
+            
+        return feat,targets_y
     
     def ood_detection_knn_pr_test(self,):
         all_features=torch.zeros(self.l_num+self.ul_num
@@ -818,145 +995,6 @@ class BaseTrainer():
             test_feat=torch.cat(test_feat,dim=0)
             test_y=torch.cat(test_y,dim=0) 
             return (labeled_feat,labeled_y,labeled_idx),(unlabeled_feat,unlabeled_y,unlabeled_idx),(test_feat,test_y,test_idx)
-    
-    def compute_mean_cov(self,feat,y): # 计算均值+协方差
-        uniq_c = torch.unique(y)
-        means=torch.zeros(self.num_classes,feat.size(1))
-        covs=torch.zeros(self.num_classes,feat.size(1))
-        for c in uniq_c:
-            c = int(c)
-            if c==-1:continue
-            select_index = torch.nonzero(
-                y == c, as_tuple=False).squeeze(1)
-            embedding_temp = embedding[select_index]  
-            mean = embedding_temp.mean(dim=0)
-            var = embedding_temp.var(dim=0, unbiased=False)
-            means[c]=mean
-            covs[c]=var
-        return means,covs
-        
-    def plot(self):
-        plot_group_acc_over_epoch(group_acc=self.train_group_accs,title="Train Group Average Accuracy",save_path=os.path.join(self.pic_dir,'train_group_acc.jpg'))
-        plot_group_acc_over_epoch(group_acc=self.val_group_accs,title="Val Group Average Accuracy",save_path=os.path.join(self.pic_dir,'val_group_acc.jpg'))
-        plot_group_acc_over_epoch(group_acc=self.test_group_accs,title="Test Group Average Accuracy",save_path=os.path.join(self.pic_dir,'test_group_acc.jpg'))
-        plot_acc_over_epoch(self.train_accs,title="Train average accuracy",save_path=os.path.join(self.pic_dir,'train_acc.jpg'),)
-        plot_acc_over_epoch(self.test_accs,title="Test average accuracy",save_path=os.path.join(self.pic_dir,'test_acc.jpg'),)
-        plot_acc_over_epoch(self.val_accs,title="Val average accuracy",save_path=os.path.join(self.pic_dir,'val_acc.jpg'),)
-        plot_loss_over_epoch(self.train_losses,title="Train Average Loss",save_path=os.path.join(self.pic_dir,'train_loss.jpg'))
-        plot_loss_over_epoch(self.val_losses,title="Val Average Loss",save_path=os.path.join(self.pic_dir,'val_loss.jpg'))
-        plot_loss_over_epoch(self.test_losses,title="Test Average Loss",save_path=os.path.join(self.pic_dir,'test_loss.jpg'))
-    
-    def get_class_counts(self,dataset):
-        """
-            Sort the class counts by class index in an increasing order
-            i.e., List[(2, 60), (0, 30), (1, 10)] -> np.array([30, 10, 60])
-        """
-        return np.array(dataset.num_per_cls_list)
-        # class_count = dataset.num_samples_per_class
-
-        # # sort with class indices in increasing order
-        # class_count.sort(key=lambda x: x[0])
-        # per_class_samples = np.asarray([float(v[1]) for v in class_count])
-        # return per_class_samples
-    
-    def get_label_dist(self, dataset=None, normalize=None):
-        """
-            normalize: ["sum", "max"]
-        """
-        if dataset is None:
-            dataset = self.labeled_trainloader.dataset
-
-        class_counts = torch.from_numpy(self.get_class_counts(dataset)).float()
-        class_counts = class_counts.cuda()
-
-        if normalize:
-            assert normalize in ["sum", "max"]
-            if normalize == "sum":
-                return class_counts / class_counts.sum()
-            if normalize == "max":
-                return class_counts / class_counts.max()
-        return class_counts
-
-    def build_labeled_loss(self, cfg , warmed_up=False)  :
-        loss_type = cfg.MODEL.LOSS.LABELED_LOSS
-        num_classes = cfg.MODEL.NUM_CLASSES
-        assert loss_type == "CrossEntropyLoss"
-
-        class_count = self.get_label_dist(device=self.device)
-        per_class_weights = None
-        if cfg.MODEL.LOSS.WITH_LABELED_COST_SENSITIVE and warmed_up:
-            loss_override = cfg.MODEL.LOSS.COST_SENSITIVE.LOSS_OVERRIDE
-            beta = cfg.MODEL.LOSS.COST_SENSITIVE.BETA
-            if beta < 1:
-                # effective number of samples;
-                effective_num = 1.0 - torch.pow(beta, class_count)
-                per_class_weights = (1.0 - beta) / effective_num
-            else:
-                per_class_weights = 1.0 / class_count
-
-            # sum to num_classes
-            per_class_weights = per_class_weights / torch.sum(per_class_weights) * num_classes
-
-            if loss_override == "":
-                # CE loss
-                loss_fn = build_loss(
-                    cfg, loss_type, class_count=class_count, class_weight=per_class_weights
-                )
-
-            elif loss_override == "LDAM":
-                # LDAM loss
-                loss_fn = build_loss(
-                    cfg, "LDAMLoss", class_count=class_count, class_weight=per_class_weights
-                )
-
-            else:
-                raise ValueError()
-        else:
-            loss_fn = build_loss(
-                cfg, loss_type, class_count=class_count, class_weight=per_class_weights
-            )
-
-        return loss_fn
-
-    def get_dl_embed_center(self):
-        model=self.get_val_model().eval()
-        emb = []
-        centers = [0 for c in range(self.num_classes)]
-        cnt = [0 for c in range(self.num_classes)]
-        with torch.no_grad():
-            for batch_idx,(inputs, targets, _) in enumerate(self.labeled_trainloader):
-                if len(inputs)==2 or len(inputs)==3:
-                    inputs=inputs[0]
-                inputs, targets = inputs.cuda(), targets.cuda()
-                outputs=self.model(inputs,return_encoding=True)
-                outputs=self.model(outputs,return_projected_feature=True)                
-                emb.append(outputs.cpu())
-                for ii in range(targets.size(0)):
-                    cnt[targets[ii].item()] = cnt[targets[ii].item()] + 1
-                    centers[targets[ii].item()] = centers[targets[ii].item()] + outputs[ii].cpu()
-        for c in range(self.num_classes):
-            centers[c] = (centers[c] / cnt[c]).unsqueeze(0)
-        centers = torch.cat(centers, dim=0)
-        emb = torch.cat(emb, dim=0)
-        return emb, centers   
-    
-    def prepare_feat(self,dataloader):
-        model=self.get_val_model().eval()
-        n=dataloader.dataset.total_num
-        feat=torch.zeros((n,self.feature_dim)) 
-        targets_y=torch.zeros(n).long()
-        with torch.no_grad():
-            for batch_idx,(inputs, targets, idx) in enumerate(dataloader):
-                if len(inputs)==2 or len(inputs)==3:
-                    inputs=inputs[0]
-                inputs, targets = inputs.cuda(), targets.cuda()
-                outputs=self.model(inputs,return_encoding=True)
-                outputs=self.model(outputs,return_projected_feature=True) 
-                feat[idx]=   outputs.cpu()  
-                targets_y[idx]=targets.cpu() 
-        # feat=torch.cat(feat,dim=0)
-        # targets_y=torch.cat(targets_y,dim=0)
-        return feat,targets_y
     
     def get_id_thresh(self):
         model=self.get_val_model().eval()

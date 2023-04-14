@@ -4,7 +4,7 @@ import numpy as np
 import os
 import torch.nn as nn
 import pandas as pd
-from utils.plot import plot_accs_zhexian
+from utils.plot import *
 from utils.validate_model import validate
 from utils.utils import *
 import argparse
@@ -22,21 +22,20 @@ from utils.utils import load_checkpoint
 from trainer import *
 from models.projector import  Projector
  
+
 algorithms=algorithms=[
     "Supervised",
     "FixMatch", 
-    "MixMatch",
-    # "PseudoLabel",
-    # "MTCF",
+    "MixMatch", 
     "DASO",
     "CReST",
-    "MOOD"
-    # "DS3F"
+    "MOOD" ,
+    'CCSSL',
+    'DCSSL'
     ]
 ood_dataset=["TIN"]
-ood_r=[0.25,0.5,0.75]
-IF=[10,50,100]  
-
+ 
+ 
 def parse_args():
     parser = argparse.ArgumentParser(description="codes for analysing model")
 
@@ -44,7 +43,7 @@ def parse_args():
         "--cfg",
         help="decide which cfg to use",
         required=False,
-        default="cfg/analyse_cifar10.yaml",
+        default="cfg/analyse2_cifar10.yaml",
         type=str,
     ) 
     
@@ -57,30 +56,78 @@ def parse_args():
 
     args = parser.parse_args()
     return args 
-
-def analyse_1(cfg):
+       
+def analyse1(cfg): 
+    
+    cfg.defrost()
+    cfg.ALGORITHM.NAME='FixMatch' 
+    cfg.freeze() 
+    
+    # ===== prepare pic path ====
+    root_path=get_root_path(cfg) 
+    pic_save_path= os.path.join(root_path, "a_pic")
+    if not os.path.exists(pic_save_path):
+        os.mkdir(pic_save_path)
+    
+    model_path=os.path.join(root_path,'models','best_model.pth')
     trainer=build_trainer(cfg)
-    _, avg_acc ,group_acc,class_acc= trainer.evaluate(return_class_acc=True,return_group_acc=True)     
-    gt1,pred1,feat1 = trainer.get_test_data_feat(model='biased')
-    gt2,pred2,feat2 = trainer.get_test_data_feat(model='debiased')  
-    return 
+    trainer.load_checkpoint(model_path)
+    train_results,test_results=trainer.count_p_d()       
+    # plot group acc  
+    name=cfg.ALGORITHM.NAME+'_train_pc.jpg'
+    save_path=os.path.join(pic_save_path,name)    
+    plot_pd_heatmap(train_results,save_path=save_path)
+    
+    name=cfg.ALGORITHM.NAME+'_test_pc.jpg'
+    save_path=os.path.join(pic_save_path,name)    
+    plot_pd_heatmap(test_results,save_path=save_path)
+           
+     
+    print("== Type 1 analysis has been done! ==")
+    return
+  
 def analyse(cfg,analyse_type):
+    
     if analyse_type==1:    
-        analyse_1(cfg)
+        analyse1(cfg)
+     
     else:
         print("Invalid analyse type!")
         
     return 
 
-if __name__ == "__main__":
-    args = parse_args()
-    update_config(cfg, args)
+
+seed=7
+os.environ['PYTHONHASHSEED'] = str(seed)
+torch.manual_seed(seed) 
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed) # if you are using multi-GPU.
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True 
+np.random.seed(seed)
+
+args = parse_args()
+update_config(cfg, args) 
+IF=cfg.DATASET.IFS 
+ood_r=cfg.DATASET.OODRS  
+analyse_type=cfg.ANALYSE_TYPE 
+
+for if_ in IF:  # if
+    # 同分布
+    for r in ood_r:  
+        cfg.defrost()
+        cfg.DATASET.DL.IMB_FACTOR_L=if_
+        cfg.DATASET.DU.ID.IMB_FACTOR_UL=if_
+        cfg.SEED=seed
+        cfg.DATASET.DU.OOD.RATIO=r
+        cfg.freeze() 
+        
+        print("========== Start analysing ==========")
+        for item in analyse_type: 
+            print("=== Start type {} analysing ===".format(item))
+            analyse(cfg,item)
+        print("=========== Analyse done! ==========")
+        
     
-    cudnn.benchmark = True 
-    analyse_type=cfg.ANALYSE_TYPE 
-    print("========== Start analysing ==========")
-    for item in analyse_type:
-        assert item in analyse_type_map.keys()
-        print("=== Start type {} analysing : {}===".format(item,analyse_type_map[item]))
-        analyse(cfg,item)
-    print("=========== Analyse done! ==========")
+   
+   

@@ -21,6 +21,14 @@ helvetica_path='/home/aa/xlhuang/Openset-LT-SSL/utils/fonts/Helvetica.ttf'
 font_h = fm.FontProperties(fname=helvetica_path)
 font_t = fm.FontProperties(fname=times_path) 
 # plt.rcParams['text.usetex'] = True
+
+def plot_pd_heatmap(results,save_path=''):
+    plt.figure(figsize=(11, 9),dpi=300)
+    sns.heatmap(data=results)
+    if save_path!='': 
+        plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+
 def plot_pr(precision,recall,save_path=''):
     assert len(precision)==len(recall) and len(precision)>0
     fontsize=16

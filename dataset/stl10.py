@@ -90,7 +90,10 @@ def get_stl10(root, out_dataset, start_label=0,ood_ratio=0,
 
     # if cfg.ALGORITHM.PRE_TRAIN.SimCLR.ENABLE:
     train_dataset =STL10Dataset(total_train,transforms=transform_train_ul,num_classes=num_classes)
-    transform_pre=build_simclr_transform(cfg)
+    if cfg.ALGORITHM.NAME=='OODDetect':
+        transform_pre=transform_train_ul
+    else:
+        transform_pre=build_simclr_transform(cfg)
     pre_train_dataset  =  STL10Dataset(total_train,transforms=transform_pre,num_classes=num_classes)
     return l_train, ul_train, train_dataset, stl10_valid, stl10_test,pre_train_dataset
     # else:

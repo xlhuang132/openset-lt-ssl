@@ -46,24 +46,20 @@ class FusionMatrix(object):
         acc[np.isnan(acc)] = 0
         return acc
      
-    def get_TNR(self):
-        if self.num_classes==2:
-            tnr=self.matrix[0,0]/(self.matrix[0,0]+self.matrix[1,0])
-            return tnr
-        return 
+    def get_TNR(self): 
+        tnr=self.matrix[0,0]/(self.matrix[0,0]+self.matrix[1,0]) 
+        return tnr if not np.isnan(tnr) else 0
     
-    def get_TPR(self):
-        if self.num_classes==2:
-            tnr=self.matrix[1,1]/(self.matrix[1,1]+self.matrix[0,1])
-            return tnr
-        return 
+    def get_TPR(self): 
+        tpr=self.matrix[1,1]/(self.matrix[1,1]+self.matrix[0,1])        
+        return tpr if not np.isnan(tpr) else 0
 
     def get_accuracy(self):
         acc = (
             np.sum([self.matrix[i, i] for i in range(self.num_classes)])
             / self.matrix.sum()
-        )
-        return acc
+        ) 
+        return acc if not np.isnan(acc) else 0
 
     def plot_per_acc(self,save_path):
         acc=self.get_acc_per_class()

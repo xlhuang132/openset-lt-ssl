@@ -132,8 +132,7 @@ class DCSSLTrainer(BaseTrainer):
             max_probs, pred_class = torch.max(probs_u_w, dim=-1)  
         
         loss_weight = max_probs.ge(self.conf_thres).float()     
-        if self.epoch>self.warmup_epoch:
-            loss_weight*=self.id_masks[u_index] 
+        loss_weight*=self.id_masks[u_index] 
         # loss_weight=self.select_du_samples(max_probs, pred_class, dynamic_thresh=True,update_thresh=[probs_u_w,pred_class])
         loss_cons = self.ul_criterion(
             logits_u_s, pred_class, weight=loss_weight, avg_factor=logits_u_s.size(0)
@@ -265,10 +264,11 @@ class DCSSLTrainer(BaseTrainer):
                     sample_weight=self.get_sim_with_prototypes(f_u_s1, pred_class)
                     id_mask=torch.eye(sample_weight).cuda()
                 elif self.loss_version==10:
-                    sample_weight= self.get_sim_with_prototypes(f_u_s1, pred_class)
-                    id_mask= self.id_masks[u_index]
-                    ood_mask=1-id_mask
-                    sample_weight= id_mask*(1-max_probs)+ood_mask*sample_weight
+                    with torch.no_grad():
+                        sample_weight= self.get_sim_with_prototypes(f_u_s1.detach(), pred_class)
+                        id_mask= self.id_masks[u_index]
+                        ood_mask=1-id_mask
+                        sample_weight= id_mask*(1-max_probs)+ood_mask*sample_weight
                 elif self.loss_version==11:
                     sample_weight=2-max_probs
                     id_mask=torch.ones_like(sample_weight).cuda()
@@ -285,14 +285,12 @@ class DCSSLTrainer(BaseTrainer):
                         
                         mask=labeled_mask*id_mask       
                                          
-                        mask=(1-cos_sim)*mask+(1+cos_sim)*(1-mask)
+                        mask=(1-cos_sim)*mask+(1+cos_sim)*(1-id_mask)
                         
                     loss_d_ctr = self.loss_contrast(features, 
-                                                    labels=labels, 
                                                     mask=mask,
                                                     reduction=None)
-                    loss_d_ctr = (loss_d_ctr * sample_weight).mean()
-                    self.lambda_d =  self.final_lambda_d*(float(math.ceil(self.epoch//10))/(self.max_epoch//10))
+                    loss_d_ctr = (loss_d_ctr * sample_weight).mean() 
                 else:loss_d_ctr=torch.tensor(0.).cuda()
             else:loss_d_ctr=torch.tensor(0.).cuda()
         
@@ -315,14 +313,25 @@ class DCSSLTrainer(BaseTrainer):
         return now_result.cpu().numpy(), targets_x.cpu().numpy()
     
     def load_id_masks(self,resume):
-        self.logger.info(f"Resuming checkpoint from: {resume}")
+        self.logger.info(f"Resuming id_masks from: {resume}")
+        self.logger.info(' ')
         state_dict = torch.load(resume)
         try:
             self.id_masks=state_dict['id_masks']
             self.ood_masks=state_dict['ood_masks']  
         except:
             self.logger.warning('Load id_masks or ood_masks wrong!')
-         
+        du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
+        self.id_detect_fusion.update(self.id_masks,du_gt)
+        self.ood_detect_fusion.update(self.ood_masks,1-du_gt)  
+        id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
+        ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
+        tpr=self.id_detect_fusion.get_TPR()
+        tnr=self.ood_detect_fusion.get_TPR()
+        self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
+            format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
+        self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
+      
         self.logger.info("Successfully loaded the id_mask.") 
         return
     

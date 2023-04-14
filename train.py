@@ -2,8 +2,7 @@
 import torch 
 import argparse
 from config.defaults import update_config,_C as cfg
-from trainer.build_trainer import build_trainer
-# from utils.set_seed import set_seed
+from trainer.build_trainer import build_trainer 
 import random
 import os
 import numpy as np
@@ -30,8 +29,9 @@ def parse_args():
     return args 
 
 
-seed=7
 # seed=random.randint(1,1000)
+seed=7
+os.environ['PYTHONHASHSEED'] = str(seed)
 torch.manual_seed(seed) 
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed) # if you are using multi-GPU.
