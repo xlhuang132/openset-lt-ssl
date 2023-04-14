@@ -100,13 +100,14 @@ class BaseTrainer():
         self.ood_masks=torch.zeros(self.ul_num).cuda() 
         self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE
         self.warmup_iter=cfg.ALGORITHM.PRE_TRAIN.WARMUP_EPOCH*self.train_per_step 
-        self.feature_dim=128  
-        self.k=cfg.ALGORITHM.PRE_TRAIN.OOD_DETECTOR.K    
+        self.feature_dim=64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8'] else 128 
+        self.k=cfg.ALGORITHM.OOD_DETECTOR.K    
+        self.id_thresh_percent=cfg.ALGORITHM.OOD_DETECTOR.THRESH_PERCENT
         self.ood_detect_fusion = FusionMatrix(2)   
         self.id_detect_fusion = FusionMatrix(2)  
-        self.update_domain_y_iter=cfg.ALGORITHM.PRE_TRAIN.OOD_DETECTOR.DOMAIN_Y_UPDATE_ITER
-        self.ood_threshold=cfg.ALGORITHM.PRE_TRAIN.OOD_DETECTOR.OOD_THRESHOLD
-        self.id_threshold=cfg.ALGORITHM.PRE_TRAIN.OOD_DETECTOR.ID_THRESHOLD
+        # self.update_domain_y_iter=cfg.ALGORITHM.OOD_DETECTOR.DOMAIN_Y_UPDATE_ITER
+        # self.ood_threshold=cfg.ALGORITHM.OOD_DETECTOR.OOD_THRESHOLD
+        # self.id_threshold=cfg.ALGORITHM.OOD_DETECTOR.ID_THRESHOLD
         self.rebuild_unlabeled_dataset_enable=False        
         self.opearte_before_resume()
         
@@ -120,9 +121,6 @@ class BaseTrainer():
         new_ul_dataset = BaseNumpyDataset(ul_data_np, transforms=ul_transform,num_classes=self.num_classes)
         self.test_unlabeled_trainloader = _build_loader(self.cfg, new_ul_dataset,is_train=False)
         
-        
-        
-            
             
     def prepare_output_path(self,cfg,logger):
         return prepare_output_path(cfg,logger)
@@ -220,10 +218,10 @@ class BaseTrainer():
                 # reset 
                 fusion_matrix = FusionMatrix(self.num_classes)
                 acc = AverageMeter()                 
-                self.epoch= (self.iter // self.train_per_step)+1   
                 self.loss_init()             
                 start_time = time.time()   
                 self.operate_after_epoch()
+                self.epoch= (self.iter // self.train_per_step)+1   
         return
     
     def finetune_step(self):
@@ -379,10 +377,10 @@ class BaseTrainer():
                 # reset 
                 fusion_matrix = FusionMatrix(self.num_classes)
                 acc = AverageMeter()                 
-                self.epoch= (self.iter // self.train_per_step)+1   
                 self.loss_init()             
                 start_time = time.time()   
                 self.operate_after_epoch()
+                self.epoch+=1   
                 
         self.plot()       
         return
@@ -413,11 +411,11 @@ class BaseTrainer():
         self.unlabeled_train_iter = iter(new_loader)
     
     def detect_ood(self):
-        normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)        
+        # normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)        
         l_feat,l_y=self.prepare_feat(self.test_labeled_trainloader)
-        l_feat=normalizer(l_feat)
+        # l_feat=normalizer(l_feat)
         u_feat,u_y=self.prepare_feat(self.test_unlabeled_trainloader) 
-        u_feat=normalizer(u_feat)
+        # u_feat=normalizer(u_feat)
         du_gt=torch.zeros(self.ul_num) 
         id_mask=torch.zeros(self.ul_num).long().cuda()
         ood_mask=torch.zeros(self.ul_num).long().cuda()
@@ -427,15 +425,17 @@ class BaseTrainer():
         D, _ = index.search(u_feat, self.k) 
         novel = -D[:,-1] # -最大的距离
         D2, _ = index.search(l_feat, self.k)
-        known=-D2[:,-1] # -最大的距离 
-        known.sort()
-        thresh = known[50] #known[50] #  known[round(0.05 * self.l_num)]        
+        known= - D2[:,-1] # -最大的距离 
+        known.sort() # 从小到大排序 负号
+        thresh = known[round((1-self.id_thresh_percent)*self.l_num)] #known[50] #  known[round(0.05 * self.l_num)]        
         id_masks= (torch.tensor(novel)>=thresh).float()
         ood_masks=1-id_masks 
         self.id_masks= id_masks
         self.ood_masks=1-id_masks
         self.id_masks=self.id_masks.cuda()
         self.ood_masks=self.ood_masks.cuda()
+        self.id_detect_fusion.reset()
+        self.ood_detect_fusion.reset()
         self.id_detect_fusion.update(id_masks.numpy(),du_gt) 
         self.ood_detect_fusion.update(ood_masks,1-du_gt)  
         if self.rebuild_unlabeled_dataset_enable and self.iter==self.warmup_iter:
@@ -460,11 +460,7 @@ class BaseTrainer():
             self.logger.info("== ood_prec:{:>5.3f} id_prec:{:>5.3f} ood_rec:{:>5.3f} id_rec:{:>5.3f}".\
                 format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
             self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
-            self.logger.info('=='*40)    
-            
-            if self.iter<self.warmup_iter:   
-                self.ood_detect_fusion.reset() 
-                self.id_detect_fusion.reset()
+            self.logger.info('=='*40)     
         else:
             self.logger.info("=="*30)
         pass

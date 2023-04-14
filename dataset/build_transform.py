@@ -172,7 +172,7 @@ def build_transform(cfg):
                 ),  # identity
             ]
         )
-    elif algo_name in ['CCSSL','DCSSL']: #'DCSSL'
+    elif algo_name in ['CCSSL','DCSSL','OODDetect']: #'DCSSL'
         ul_train = GeneralizedSSLTransform(
             [
                 aug(cfg, img_size, norm_params=norm_params, resolution=resolution),  # weak

@@ -33,7 +33,19 @@ def plot_pr(precision,recall,save_path=''):
         plt.savefig(save_path, bbox_inches='tight')
     plt.close()
     
-
+def plot_ood_detection_over_epoch(results=[],save_path=''):
+    assert results!=[]
+    x=[i+1 for i in range(len(results[0]))]
+    plt.figure(figsize=(8,8)) 
+    titles=['ID Pre','ID Rec','OOD Pre','OOD Rec']    
+    for i,result in enumerate(results):
+        plt.plot(x, result, linewidth=3, markersize=8)  # 绘制折线图，添加数据点，设置点的大小
+    plt.grid()
+    plt.legend(titles,fontsize=10)      
+    if save_path!='':
+        plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    
 def plot_group_acc_over_epoch(group_acc,legend=['Many','Medium','Few'],title="Group Acc",step=1,save_path='',warmup_epoch=0):
     assert len(group_acc)>0 and len(group_acc[0])==len(legend)
     group_acc=np.array(group_acc)

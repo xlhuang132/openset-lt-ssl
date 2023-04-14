@@ -15,6 +15,7 @@ from .acssl_trainer import ACSSLTrainer
 from .pcssl_trainer import PCSSLTrainer
 from .ressl_trainer import ReSSLTrainer
 from .fixmatchbcl_trainer import FixMatchBCLTrainer
+from .ood_detector_trainer import OODDetectorTrainer
 
 def build_trainer(cfg):
     alg=cfg.ALGORITHM.NAME
@@ -49,5 +50,7 @@ def build_trainer(cfg):
         return PCSSLTrainer(cfg) 
     elif alg== 'ReSSL':
         return ReSSLTrainer(cfg) 
+    elif alg=='OODDetect':
+        return OODDetectorTrainer(cfg)
     else:
         raise "The algorithm type is not valid!"

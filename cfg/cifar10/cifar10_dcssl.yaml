@@ -9,15 +9,17 @@ TRAIN_STEP: 500 #
 ALGORITHM:
   NAME: "DCSSL" 
   DCSSL:  
-    LAMBDA_D: 0.2
+    LAMBDA_D: 1.
     DCSSL_CONTRA_TEMPERTURE: 0.07
     FP_K: 5
+    WARMUP_EPOCH: 5
     CONTRAST_THRESH: 0.9
     M: 0.9
     CONTRAST_WITH_THRESH: True
     CONTRAST_WITH_HP: True
     CONTRAST_WITH_HN: True
-    LOSS_VERSION: 11
+    LOSS_VERSION: 10
+    ID_MASK_PATH: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/OODDetect/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
 
 MODEL:
   NAME: "WRN_28_2" #"Resnet34" #"Resnet50" #   
@@ -47,5 +49,5 @@ DATASET:
       DATASET: 'TIN'
       RATIO: 0.0   
       INCLUDE_ALL: True  
-RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_11/models/checkpoint.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_11/models/checkpoint.pth'
 # RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_4/models/checkpoint.pth'

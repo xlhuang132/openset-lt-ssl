@@ -48,4 +48,4 @@ DATASET:
       INCLUDE_ALL: True
       DATASET: 'TIN'
       RATIO: 0.0 #    
-RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/DCSSL/WRN_28_8/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/v_9/models/checkpoint.pth'
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/DCSSL/WRN_28_8/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-all/v_9/models/checkpoint.pth'

@@ -28,12 +28,12 @@ ALGORITHM:
     SimCLR: 
       ENABLE: True
       TEMPERATURE: 0.5
-    OOD_DETECTOR:
-      TEMPERATURE: 0.5
-      MAGNITUDE: 0.0014 #  
-      THRESHOLD: 0.10004
-      DOMAIN_Y_UPDATE_ITER: 5
-      K: 50 # 'Top k most similar images used to predict the label' 
+  OOD_DETECTOR:
+    TEMPERATURE: 0.5
+    MAGNITUDE: 0.0014 #  
+    THRESHOLD: 0.10004
+    THRESH_PERCENT: 0.1
+    K: 50 # 'Top k most similar images used to predict the label' 
     
 MODEL:
   NAME:   "Resnet50"  #"WRN_28_2" #  "Resnet50" #
