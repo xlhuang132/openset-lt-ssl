@@ -30,7 +30,7 @@ DATASET:
   IFS: [100]
   OODRS: [0.0]  
   DL:
-    NUM_LABELED_HEAD: 1500
+    NUM_LABELED_HEAD: 150
     # IMB_FACTOR_L: 10
   DU:
     ID:
@@ -40,7 +40,7 @@ DATASET:
       ENABLE: True
       DATASET: 'TIN' #'TIN'
       RATIO: 0.0  
-      INCLUDE_ALL: True
+      # INCLUDE_ALL: True
     
   
  

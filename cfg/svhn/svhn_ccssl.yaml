@@ -25,7 +25,7 @@ DATASET:
   IFS: [100]
   OODRS: [0.0]  
   DL:
-    NUM_LABELED_HEAD: 1500
+    NUM_LABELED_HEAD: 150 #0
     # IMB_FACTOR_L: 100
   DU:
     ID:

@@ -53,8 +53,8 @@ class DCSSLTrainer(BaseTrainer):
         self.sharpen_temp=0.5
         # self.gce_loss=GeneralizedCELoss()
         self.dynamic_thresh=torch.tensor([0.5]*self.num_classes).cuda()
-        self.means=torch.zeros(self.num_classes,64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_2'] else 128).cuda()
-        self.covs=torch.zeros(self.num_classes,64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_2'] else 128).cuda()
+        self.means=torch.zeros(self.num_classes,64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8'] else 128).cuda()
+        self.covs=torch.zeros(self.num_classes,64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8'] else 128).cuda()
         self.fp_k=cfg.ALGORITHM.DCSSL.FP_K
         self.loss_version=self.cfg.ALGORITHM.DCSSL.LOSS_VERSION
         self.logger.info('contrastive loss version {}'.format(self.loss_version))
@@ -295,7 +295,12 @@ class DCSSLTrainer(BaseTrainer):
             if self.iter>100:
                 # v9: score
                 # v10: 2-score
-                contrast_mask=self.get_contrast_weight(f_u_s1, pred_class)
+                if self.loss_version==9:
+                    contrast_mask=self.get_contrast_weight(f_u_s1, pred_class)
+                elif self.loss_version==10:
+                    contrast_mask= 1-self.get_contrast_weight(f_u_s1, pred_class)
+                elif self.loss_version==11:
+                    contrast_mask=2-max_probs
                 if contrast_mask.shape[0]>0:
                     with torch.no_grad(): 
                         cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
@@ -331,22 +336,17 @@ class DCSSLTrainer(BaseTrainer):
     
     def get_contrast_weight(self,features,pred_class):
         # 获得每个样本的价值，如何评估每个样本是否在边界上？
-        prototypes = self.means.clone().detach()
-        # var=self.covs.clone().detach()
-        means=prototypes[pred_class]
-        # covs=var[pred_class]        
-        # diff=features-means 
-        
+        prototypes = self.means.clone().detach() 
+        means=prototypes[pred_class]          
         score=torch.cosine_similarity(features,means,dim=-1)  
-        return 2-score
+        return score
     
     def update_mean_cov(self,features,y): 
         uniq_c = torch.unique(y)
         for c in uniq_c:
             c = int(c)
             if c==-1:continue
-            select_index = torch.nonzero(
-                y == c, as_tuple=False).squeeze(1)
+            select_index = torch.nonzero(y == c, as_tuple=False).squeeze(1)
             if select_index.shape[0]>0:
                 embedding_temp = features[select_index]  
                 mean = embedding_temp.mean(dim=0)

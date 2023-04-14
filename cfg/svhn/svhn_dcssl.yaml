@@ -3,49 +3,49 @@
 OUTPUT_DIR: "outputs/" 
 
 SHOW_STEP: 100
-SAVE_EPOCH: 2
+SAVE_EPOCH: 10
 MAX_EPOCH: 500
 TRAIN_STEP: 500 # 
 ALGORITHM:
   NAME: "DCSSL"
   CONFIDENCE_THRESHOLD: 0.95  
   DCSSL: 
-    BIASED_Q: 0.5
-    LAMBDA_D: 1.    
+    LAMBDA_D: 0.2
     DCSSL_CONTRA_TEMPERTURE: 0.07
+    FP_K: 5
+    CONTRAST_THRESH: 0.9
+    M: 0.9
+    CONTRAST_WITH_THRESH: True
+    CONTRAST_WITH_HP: True
+    CONTRAST_WITH_HN: True
+    LOSS_VERSION: 11
+    
 
 MODEL:
   NAME:  "WRN_28_2" #"Resnet50"   
-   # ===========================
-  OPTIMIZER:
-    TYPE: 'SGD'
-    BASE_LR: 0.03
-    MOMENTUM: 0.9
-    WEIGHT_DECAY: 1e-4 
-
+   # =========================== 
 DATASET:
   NAME: "svhn"
   ROOT: "./data/svhn" 
   NUM_CLASSES: 10
   GROUP_SPLITS: [3,3,4]
   IFS: [100]
-  OODRS: [0.5]  
+  OODRS: [0.0]  
   DOMAIN_DATASET_RETURN_INDEX: True
   UNLABELED_DATASET_RETURN_INDEX: True
   LABELED_DATASET_RETURN_INDEX: True 
   DL:
-    NUM_LABELED_HEAD: 1500
-    IMB_FACTOR_L: 100
+    NUM_LABELED_HEAD: 150
+    # IMB_FACTOR_L: 100
   DU:
     ID:
-      NUM_UNLABELED_HEAD: 3000
-      IMB_FACTOR_UL: 100
-      REVERSE_UL_DISTRIBUTION: False
+      NUM_UNLABELED_HEAD: 4500
+      # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
       DATASET: 'TIN'
-      RATIO: 0.0 #   
-    UNLABELED_BATCH_RATIO: 2
-  BATCH_SIZE: 64 
+      RATIO: 0.0 #    
+      # INCLUDE_ALL: True
+  # BATCH_SIZE: 64 
  
  

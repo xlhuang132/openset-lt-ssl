@@ -43,13 +43,31 @@ def split_trainval(trainval, num_valid, seed = 0,base=None) :
     for i in range(num_classes):
         cls_inds = np.where(trainval_labels == i)[0]
         rng.shuffle(cls_inds)
-        train_inds.extend(cls_inds[num_valid_cls:])
-        val_inds.extend(cls_inds[:num_valid_cls])
+        train_inds.extend(cls_inds[:-num_valid_cls])
+        val_inds.extend(cls_inds[-num_valid_cls:])
 
     train_dataset = dict(images=trainval_images[train_inds], labels=trainval_labels[train_inds])
     val_dataset = dict(images=trainval_images[val_inds], labels=trainval_labels[val_inds])
     return train_dataset, val_dataset
 
+
+# ============= mtcf =============
+# def train_val_split(labels, n_labeled_per_class):
+#     labels = np.array(labels)
+#     train_labeled_idxs = []
+#     train_unlabeled_idxs = []
+#     val_idxs = []
+
+#     for i in range(10):
+#         idxs = np.where(labels == i)[0]
+#         np.random.shuffle(idxs)
+#         train_labeled_idxs.extend(idxs[:n_labeled_per_class])
+#         train_unlabeled_idxs.extend(idxs[n_labeled_per_class:-500])
+#         val_idxs.extend(idxs[-500:])
+#     np.random.shuffle(train_labeled_idxs)
+#     np.random.shuffle(train_unlabeled_idxs)
+#     np.random.shuffle(val_idxs)
+#     return train_labeled_idxs, train_unlabeled_idxs, val_idxs
 
 def split_val_from_train(trainval, num_valid):
     trainval_images = trainval["images"]

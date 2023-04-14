@@ -28,16 +28,18 @@ class Projector(nn.Module):
 
     def forward(self, x, internal_output_list=False,normalized=False):
             
-        #output_list = []
+        output_list = []
 
         output = self.linear_1(x)
         output = F.relu(output)
-        #output_list.append(output)
+        
+        output_list.append(output)
         if normalized: # l2norm
             output = F.normalize(self.linear_2(output),dim=-1)
         else:
             output = self.linear_2(output)
-        #output_list.append(output)
-
-
+        output_list.append(output)
+        
+        if internal_output_list:
+            return output,output_list
         return output 
