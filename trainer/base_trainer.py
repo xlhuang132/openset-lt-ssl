@@ -654,30 +654,32 @@ class BaseTrainer():
         
         prototypes=self.get_prototypes(dl_results[0],dl_results[1])
         
-        c1=dl_results[2][0]
-        p1=prototypes[dl_results[1]]
-        d1=torch.cosine_similarity(dl_results[0],p1,dim=-1)  
+        c1=dl_results[2][1]
+        # p1=prototypes[dl_results[1]]
+        d1=torch.cosine_similarity(dl_results[0],prototypes,dim=-1)  
         
-        c2=du_results[2][0]
-        p2=prototypes[du_results[2][1]]        
-        d2=torch.cosine_similarity(du_results[0],p2,dim=-1) 
+        c2=du_results[2][1]
+        # p2=prototypes[du_results[2][1]]        
+        d2=torch.cosine_similarity(du_results[0],prototypes,dim=-1) 
         
         c=torch.cat([c1,c2],dim=0)
         d=torch.cat([d1,d2],dim=0)
         
         train_dc=torch.zeros(11,11)
         for i in range(c.shape[0]):
-            x,y=int(c[i].item()/0.1),int((d[i].item()+1)/0.2)
-            train_dc[x][y]+=1
+            for j in range(self.num_classes):
+                x,y=int(c[i][j].item()/0.1),int((d[i][j].item()+1)/0.2)
+                train_dc[x][y]+=1
         train_dc=train_dc.numpy()
         
         test_dc=torch.zeros(11,11)
-        test_c=test_results[2][0]
-        test_p=prototypes[test_results[2][1]]  
-        test_d=torch.cosine_similarity(test_results[0],test_p,dim=-1) 
+        test_c=test_results[2][1]
+        # test_p=prototypes[test_results[2][1]]  
+        test_d=torch.cosine_similarity(test_results[0],prototypes,dim=-1) 
         for i in range(test_c.shape[0]):
-            x,y=int(test_c[i].item()/0.1),int((test_d[i].item()+1)/0.2)
-            test_dc[x][y]+=1
+            for j in range(self.num_classes):
+                x,y=int(test_c[i][j].item()/0.1),int((test_d[i][j].item()+1)/0.2)
+                test_dc[x][y]+=1
         test_dc=test_dc.numpy()
         return  train_dc,test_dc
     
@@ -800,7 +802,7 @@ class BaseTrainer():
         feat=torch.zeros((n,self.feature_dim)) 
         targets_y=torch.zeros(n).long()
         confidence=torch.zeros(n)  
-        pred_y=torch.zeros(n).long()
+        probs=torch.zeros(n,self.num_classes) 
         with torch.no_grad():
             for batch_idx,(inputs, targets, idx) in enumerate(dataloader):
                 if len(inputs)==2 or len(inputs)==3:
@@ -809,18 +811,18 @@ class BaseTrainer():
                 encoding=self.model(inputs,return_encoding=True)
                 outputs=self.model(encoding,return_projected_feature=True) 
                 logits=self.model(encoding,classifier=True)
-                probs = torch.softmax(logits.detach(), dim=-1) 
-                max_probs, pred_class = torch.max(probs, dim=-1)  
+                prob = torch.softmax(logits.detach(), dim=-1) 
+                max_probs, pred_class = torch.max(prob, dim=-1)  
                 
                 feat[idx] =   outputs.cpu()  
                 targets_y[idx] = targets.cpu()                 
                 confidence[idx]=max_probs.cpu()
-                pred_y[idx]=pred_class.cpu()
+                probs[idx]=prob.cpu()
                 
         # feat=torch.cat(feat,dim=0)
         # targets_y=torch.cat(targets_y,dim=0)
         if return_confidence:
-            return feat,targets_y,[confidence,pred_y]
+            return feat,targets_y,[confidence,probs]
             
         return feat,targets_y
     

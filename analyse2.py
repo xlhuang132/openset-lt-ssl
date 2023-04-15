@@ -58,7 +58,7 @@ def parse_args():
     return args 
        
 def analyse1(cfg): 
-    
+    algs=['MixMatch','FixMatch' ,'CCSSL','DCSSL']
     cfg.defrost()
     cfg.ALGORITHM.NAME='FixMatch' 
     cfg.freeze() 
