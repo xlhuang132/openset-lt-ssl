@@ -208,16 +208,31 @@ def get_DL_dataset_alg_DU_dataset_OOD_path(cfg,dataset=None,algorithm=None,label
 
 def get_ablation_file_name(cfg):
     file_name="" 
-    if cfg.ALGORITHM.ABLATION.DUAL_BRANCH:
-        file_name+="DUAL_BRANCH"    
-    if cfg.ALGORITHM.ABLATION.MIXUP:
-        file_name+="-MIXUP" 
-    if cfg.ALGORITHM.ABLATION.OOD_DETECTION:
-        file_name+="-OOD_DETECT"
-    if cfg.ALGORITHM.ABLATION.PAP_LOSS:
-        file_name+="-PAP_LOSS" 
-    if file_name=="":
-        file_name='A_Naive'
+    alg=cfg.ALGORITHM.NAME
+    if alg=='MOOD':
+        if cfg.ALGORITHM.ABLATION.MOOD.DUAL_BRANCH:
+            file_name+="DUAL_BRANCH"    
+        if cfg.ALGORITHM.ABLATION.MOOD.MIXUP:
+            file_name+="-MIXUP" 
+        if cfg.ALGORITHM.ABLATION.MOOD.OOD_DETECTION:
+            file_name+="-OOD_DETECT"
+        if cfg.ALGORITHM.ABLATION.MOOD.PAP_LOSS:
+            file_name+="-PAP_LOSS" 
+        if file_name=="":
+            file_name='A_Naive'
+    elif alg=='DCSSL':
+        if cfg.ALGORITHM.ABLATION.DCSSL.CT:
+            file_name+="CT"  
+        if cfg.ALGORITHM.ABLATION.DCSSL.SS:
+            file_name+="-SS" if file_name!='' else 'SS'
+        if cfg.ALGORITHM.ABLATION.DCSSL.SPS_HP:
+            file_name+="-HP" if file_name!='' else 'HP'
+        if cfg.ALGORITHM.ABLATION.DCSSL.SPS_HN:
+            file_name+="-HN" if file_name!='' else 'HN'
+        if file_name=="":
+            file_name='A_Naive'
+    else:
+        assert False
     return file_name
 
 def get_root_path(cfg,dataset=None,algorithm=None,labeled_loss_type=None,
@@ -250,13 +265,14 @@ def get_root_path(cfg,dataset=None,algorithm=None,labeled_loss_type=None,
         
     # path=os.path.join(parent_path,Branch_setting)
     path=parent_path
+    if cfg.ALGORITHM.NAME=='DCSSL':
+        path=os.path.join(path,'v_{}'.format(cfg.ALGORITHM.DCSSL.LOSS_VERSION))
     if cfg.ALGORITHM.ABLATION.ENABLE:
         file_name=get_ablation_file_name(cfg)
         path=os.path.join(path,file_name)
     if cfg.ALGORITHM.NAME=='MOOD' and cfg.SEED_PATH_ENABLE:
         path=os.path.join(path,'SEED_{}'.format(cfg.SEED))
-    if cfg.ALGORITHM.NAME=='DCSSL':
-        path=os.path.join(path,'v_{}'.format(cfg.ALGORITHM.DCSSL.LOSS_VERSION))
+    
     return path 
 
 def prepare_output_path(cfg,logger):

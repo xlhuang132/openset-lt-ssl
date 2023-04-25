@@ -29,41 +29,39 @@ from dataset.base import BaseNumpyDataset
 from dataset.build_dataloader import _build_loader
 from utils.misc import AverageMeter  
 from loss.debiased_soft_contra_loss import *
-
+from utils import OODDetectFusionMatrix
 from models.feature_queue import FeatureQueue
+from loss.focal_loss import FocalLoss
 
 class DCSSLTrainer(BaseTrainer):   
     def __init__(self, cfg):        
         super().__init__(cfg)     
         
         self.lambda_d=cfg.ALGORITHM.DCSSL.LAMBDA_D 
-        self.final_lambda_d=self.lambda_d
-        
-        self.m=cfg.ALGORITHM.DCSSL.M
-        # self.queue = FeatureQueue(cfg, classwise_max_size=None, bal_queue=True) 
-        self.debiased_contra_temperture=cfg.ALGORITHM.DCSSL.DCSSL_CONTRA_TEMPERTURE
-        # self.biased_fusion_matrix=FusionMatrix(self.num_classes)        
+        self.final_lambda_d=self.lambda_d 
+        self.m=cfg.ALGORITHM.DCSSL.M 
+        self.debiased_contra_temperture=cfg.ALGORITHM.DCSSL.DCSSL_CONTRA_TEMPERTURE        
+        self.ood_detect_confusion_matrix=OODDetectFusionMatrix(self.num_classes)
         self.loss_contrast= DebiasSoftConLoss(temperature=self.debiased_contra_temperture)
-        self.contrast_with_thresh=cfg.ALGORITHM.DCSSL.CONTRAST_THRESH
-        self.contrast_with_hp=cfg.ALGORITHM.DCSSL.CONTRAST_WITH_HP
-        self.contrast_wwith_hn=cfg.ALGORITHM.DCSSL.CONTRAST_WITH_HN
-        self.losses_d_ctr=AverageMeter()
-        self.losses_bx = AverageMeter()
-        self.losses_bu = AverageMeter()  
-        # self.biased_model=self.build_model(cfg).cuda()
-        # self.biased_optimizer=self.build_optimizer(cfg, self.biased_model)  
         self.mixup_alpha=0.5
         self.sharpen_temp=0.5
-        self.warmup_epoch=self.cfg.ALGORITHM.DCSSL.WARMUP_EPOCH
+        self.warmup_epoch=self.cfg.ALGORITHM.DCSSL.WARMUP_EPOCH        
+        self.id_pres,self.ood_pres,self.id_recs,self.ood_recs=[],[],[],[]        
+        self.data_dist=self.labeled_trainloader.dataset.num_per_cls_list
+        self.cls_prob=torch.tensor(self.data_dist/self.data_dist[0]).cuda() 
+        self.class_thresh=0.5+self.cls_prob*(self.conf_thres-0.5)
         
-        self.id_pres,self.ood_pres,self.id_recs,self.ood_recs=[],[],[],[]
-        
-        self.dynamic_thresh=torch.tensor([0.5]*self.num_classes).cuda()
         self.means=torch.zeros(self.num_classes,self.feature_dim).cuda()
-        self.covs=torch.zeros(self.num_classes,self.feature_dim).cuda()
-        self.fp_k=cfg.ALGORITHM.DCSSL.FP_K
+        self.covs=torch.zeros(self.num_classes,self.feature_dim).cuda() 
         self.loss_version=self.cfg.ALGORITHM.DCSSL.LOSS_VERSION
         self.logger.info('contrastive loss version {}'.format(self.loss_version))
+        
+        self.ablation_enable=cfg.ALGORITHM.ABLATION.ENABLE
+        self.class_aware_thresh_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.CT or not self.ablation_enable
+        self.sample_weight_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SS or not self.ablation_enable
+        self.sample_pair_weight_hp_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SPS_HP or not self.ablation_enable
+        self.sample_pair_weight_hn_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SPS_HN or not self.ablation_enable
+        
         if cfg.RESUME!='':
             self.load_checkpoint(cfg.RESUME)
         if cfg.ALGORITHM.DCSSL.ID_MASK_PATH!='':
@@ -75,8 +73,6 @@ class DCSSLTrainer(BaseTrainer):
         self.losses_x = AverageMeter()
         self.losses_u = AverageMeter() 
         self.losses_d_ctr=AverageMeter()
-        self.losses_bx = AverageMeter()
-        self.losses_bu = AverageMeter() 
         
     def train_step(self,pretraining=False): 
          
@@ -115,10 +111,10 @@ class DCSSLTrainer(BaseTrainer):
         batch_size=inputs_x.size(0)
         logits_x = logits[:batch_size]
         logits_u_w, logits_u_s, _ = logits[batch_size:].chunk(3)
-        _, f_u_s1, f_u_s2 = features[batch_size:].chunk(3)
+        f_u_w, f_u_s1, f_u_s2 = features[batch_size:].chunk(3)
         
-        # 1. ce loss          
-        loss_cls = self.l_criterion(logits_x, targets_x)
+        # 1. ce loss           
+        loss_cls=self.l_criterion(logits_x, targets_x)
         score_result = self.func(logits_x)
         now_result = torch.argmax(score_result, 1)  
         with torch.no_grad(): 
@@ -128,23 +124,22 @@ class DCSSLTrainer(BaseTrainer):
         # filter out low confidence pseudo label by self.cfg.threshold 
         with torch.no_grad(): 
             probs_u_w = torch.softmax(logits_u_w.detach(), dim=-1)
-            # pseudo label and scores for u_w
             max_probs, pred_class = torch.max(probs_u_w, dim=-1)  
         
-        loss_weight = max_probs.ge(self.conf_thres).float()     
-        loss_weight*=self.id_masks[u_index] 
-        # loss_weight=self.select_du_samples(max_probs, pred_class, dynamic_thresh=True,update_thresh=[probs_u_w,pred_class])
+        
+        if self.class_aware_thresh_enable:
+            loss_weight = max_probs.ge(self.class_thresh[pred_class]).float() 
+        else:
+            loss_weight = max_probs.ge(self.conf_thres).float()     
+        # loss_weight*=self.id_masks[u_index] 
+        # loss_weight=self.select_du_samples(max_probs, pred_class, class_thresh=True,update_thresh=[probs_u_w,pred_class])
         loss_cons = self.ul_criterion(
             logits_u_s, pred_class, weight=loss_weight, avg_factor=logits_u_s.size(0)
         )
         
-        # 3. ctr loss
-        # === biased_contrastive_loss
-        # for supervised contrastive
-        
+        # 3. ctr loss 
         labels = pred_class 
-        features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1) #torch.Size([128, 2, 64])
-        # In case of early training stage, pseudo labels have low scores 
+        features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
         
         # 0. 实例对比学习
         if self.loss_version==0:
@@ -255,6 +250,7 @@ class DCSSLTrainer(BaseTrainer):
         # 9.  cos_sim
         # 10. id: 1-max_probs ood: cos_sim
         # 11. 2-max_probs
+        # 12. sample_weight: loss_weight*(1-max_probs)
         elif self.loss_version>=9:
             # contrast_mask=max_probs.ge(self.contrast_with_thresh).float()
             if self.epoch>self.warmup_epoch:
@@ -265,30 +261,44 @@ class DCSSLTrainer(BaseTrainer):
                     id_mask=torch.eye(sample_weight).cuda()
                 elif self.loss_version==10:
                     with torch.no_grad():
-                        sample_weight= self.get_sim_with_prototypes(f_u_s1.detach(), pred_class)
-                        id_mask= self.id_masks[u_index]
-                        ood_mask=1-id_mask
-                        sample_weight= id_mask*(1-max_probs)+ood_mask*sample_weight
+                        sample_weight= 1-self.get_sim_with_prototypes(f_u_s1.detach(), pred_class)
+                    #     id_mask= self.id_masks[u_index]
+                    #     ood_mask=1-id_mask
+                    #     sample_weight= id_mask*(2-max_probs)+ood_mask*sample_weight
+                    # sample_weight=2-max_probs
                 elif self.loss_version==11:
                     sample_weight=2-max_probs
                     id_mask=torch.ones_like(sample_weight).cuda()
+                elif self.loss_version==12:
+                    if self.sample_weight_enable:
+                        sample_weight=loss_weight*(1-max_probs)
+                    else:
+                        sample_weight=loss_weight
+                elif self.loss_version==13:
+                    if self.sample_weight_enable:
+                        sample_weight=loss_weight*(1.1-max_probs)
+                    else:
+                        sample_weight=loss_weight
+                    
                 if sample_weight.shape[0]>0:
                     with torch.no_grad(): 
-                        cos_sim= cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                        cos_sim= cosine_similarity(f_u_w.detach().cpu().numpy())                        
+                        # cos_sim= cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
                         cos_sim = torch.from_numpy(cos_sim).cuda()
                         
                         y = labels.contiguous().view(-1, 1)
-                        labeled_mask= torch.eq(y, y.T).float().cuda()
-                        
-                        id_mask = id_mask.contiguous().view(-1, 1)
-                        id_mask=torch.eq(id_mask,id_mask.T).float() 
-                        
-                        mask=labeled_mask*id_mask       
-                                         
-                        mask=(1-cos_sim)*mask+(1+cos_sim)*(1-id_mask)
-                        
-                    loss_d_ctr = self.loss_contrast(features, 
-                                                    mask=mask,
+                        labeled_mask= torch.eq(y, y.T).float().cuda() 
+                        pos_mask = labeled_mask
+                        neg_mask = 1-labeled_mask  
+                        if self.sample_pair_weight_hp_enable:
+                            pos_mask=(1-cos_sim)*labeled_mask 
+                        if self.sample_pair_weight_hn_enable:
+                            neg_mask=cos_sim*(1-labeled_mask)+(1-labeled_mask)
+                  
+                    loss_d_ctr = self.loss_contrast(features,  
+                                                    pos_mask=pos_mask,
+                                                    neg_mask=neg_mask, 
+                                                    labels=pred_class,                                                   
                                                     reduction=None)
                     loss_d_ctr = (loss_d_ctr * sample_weight).mean() 
                 else:loss_d_ctr=torch.tensor(0.).cuda()
@@ -315,22 +325,34 @@ class DCSSLTrainer(BaseTrainer):
     def load_id_masks(self,resume):
         self.logger.info(f"Resuming id_masks from: {resume}")
         self.logger.info(' ')
-        state_dict = torch.load(resume)
-        try:
-            self.id_masks=state_dict['id_masks']
-            self.ood_masks=state_dict['ood_masks']  
-        except:
-            self.logger.warning('Load id_masks or ood_masks wrong!')
+        state_dict = torch.load(resume) 
+        self.id_masks=state_dict['id_masks']
+        self.ood_masks=state_dict['ood_masks']   
         du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
+        
+        
         self.id_detect_fusion.update(self.id_masks,du_gt)
-        self.ood_detect_fusion.update(self.ood_masks,1-du_gt)  
+        self.ood_detect_fusion.update(self.ood_masks,1-du_gt)        
+          
         id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
         ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
         tpr=self.id_detect_fusion.get_TPR()
-        tnr=self.ood_detect_fusion.get_TPR()
+        tnr=self.ood_detect_fusion.get_TPR()        
         self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
             format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
         self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
+        
+        with torch.no_grad():
+            for  i, (inputs, targets, idx) in enumerate(self.test_unlabeled_trainloader):
+                 self.ood_detect_confusion_matrix.update(self.id_masks[idx], targets)
+
+        tprs=self.ood_detect_confusion_matrix.get_TPR_per_class()
+        fnrs=self.ood_detect_confusion_matrix.get_FNR_per_class()
+        self.ood_detect_confusion_matrix.plot_ood_detect_confusion_bar( tprs=tprs,fnrs=fnrs,labels=[i+1 for i in range(self.num_classes)],save_path=os.path.join(self.pic_dir,'ood_detection_bar.jpg'))
+        
+        self.logger.info('=== Class TPRS:{}'.format(tprs))
+        self.logger.info('=== Class TNRS:{}'.format(fnrs))
+        
       
         self.logger.info("Successfully loaded the id_mask.") 
         return
@@ -355,28 +377,28 @@ class DCSSLTrainer(BaseTrainer):
                 self.means[c]= self.m*self.means[c]+(1-self.m)*mean 
                 self.covs[c]=self.m * self.covs[c]+(1-self.m)* var 
     
-    def select_du_samples(self,confidence, pred_class, fixed_thresh=None,update_thresh=None,dynamic_thresh=False):
-        assert fixed_thresh is not None or dynamic_thresh and update_thresh is not None
-        if not dynamic_thresh:
+    def select_du_samples(self,confidence, pred_class, fixed_thresh=None,update_thresh=None,class_thresh=False):
+        assert fixed_thresh is not None or class_thresh and update_thresh is not None
+        if not class_thresh:
             return confidence.ge(fixed_thresh).float()
         else:
             # update_thresh[0]: probability update_thresh[1]:target
             assert update_thresh and len(update_thresh)==2
-            self.update_dynamic_thresh(update_thresh[0], update_thresh[1])
-            cur_thresh=self.dynamic_thresh[pred_class]
+            self.update_class_thresh(update_thresh[0], update_thresh[1])
+            cur_thresh=self.class_thresh[pred_class]
             loss_weight=(confidence > cur_thresh).float()
             return loss_weight
     
     @torch.no_grad()
-    def update_dynamic_thresh(self,probs,pred_class):
+    def update_class_thresh(self,probs,pred_class):
         for c in range(self.num_classes):
             select_idx=torch.nonzero( pred_class==c , as_tuple=False).squeeze(1)
             if select_idx.shape[0]!=0:
                 tmp=probs[select_idx][:,c]
-                select_idx=torch.nonzero( tmp>=self.dynamic_thresh[c] , as_tuple=False).squeeze(1)
+                select_idx=torch.nonzero( tmp>=self.class_thresh[c] , as_tuple=False).squeeze(1)
                 if select_idx.shape[0]>0:
                     conf=tmp[select_idx].mean()
-                    self.dynamic_thresh[c]= self.m*self.dynamic_thresh[c]+ (1-self.m)*conf
+                    self.class_thresh[c]= self.m*self.class_thresh[c]+ (1-self.m)*conf
       
     @torch.no_grad()
     def _momentum_update_key_encoder(self):

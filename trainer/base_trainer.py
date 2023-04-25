@@ -97,7 +97,7 @@ class BaseTrainer():
         self.l_num=len(self.labeled_trainloader.dataset)
         self.ul_num=len(self.unlabeled_trainloader.dataset)  
         self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num
-        self.id_masks=torch.zeros(self.ul_num).cuda()
+        self.id_masks=torch.ones(self.ul_num).cuda()
         self.ood_masks=torch.zeros(self.ul_num).cuda() 
         self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE
         self.warmup_iter=cfg.ALGORITHM.PRE_TRAIN.WARMUP_EPOCH*self.train_per_step 
@@ -492,7 +492,7 @@ class BaseTrainer():
         eval_model=self.get_val_model() 
         test_loss, test_acc ,test_group_acc,test_class_acc=  self.eval_loop(eval_model,self.test_loader, self.val_criterion)
         if self.valset_enable:
-            val_loss, val_acc,val_group_acc,val_class_acc = self.eval_loop(eval_model,self.val_loader, self.val_criterion)
+            val_loss, val_acc,val_group_acc,val_class_acc = self.eval_loop(eval_model,self.val_loader, self.val_criterion) 
         else: 
             val_loss, val_acc,val_group_acc,val_class_acc=test_loss, test_acc ,test_group_acc,test_class_acc
         self.val_losses.append(val_loss)
@@ -524,6 +524,7 @@ class BaseTrainer():
                 # compute output
                 outputs = model(inputs,training=False)
                 feature=model(inputs,return_encoding=True)
+                feature=model(feature,return_projected_feature=True)
                 score_result = self.func(outputs)
                 now_result = torch.argmax(score_result, 1)   
                 gt.append(targets.cpu())   
@@ -656,11 +657,11 @@ class BaseTrainer():
         
         c1=dl_results[2][1]
         # p1=prototypes[dl_results[1]]
-        d1=torch.cosine_similarity(dl_results[0],prototypes,dim=-1)  
+        d1=cosine_similarity(dl_results[0],prototypes)  
         
         c2=du_results[2][1]
         # p2=prototypes[du_results[2][1]]        
-        d2=torch.cosine_similarity(du_results[0],prototypes,dim=-1) 
+        d2=cosine_similarity(du_results[0],prototypes) 
         
         c=torch.cat([c1,c2],dim=0)
         d=torch.cat([d1,d2],dim=0)
@@ -675,7 +676,7 @@ class BaseTrainer():
         test_dc=torch.zeros(11,11)
         test_c=test_results[2][1]
         # test_p=prototypes[test_results[2][1]]  
-        test_d=torch.cosine_similarity(test_results[0],prototypes,dim=-1) 
+        test_d=cosine_similarity(test_results[0],prototypes) 
         for i in range(test_c.shape[0]):
             for j in range(self.num_classes):
                 x,y=int(test_c[i][j].item()/0.1),int((test_d[i][j].item()+1)/0.2)
@@ -826,6 +827,52 @@ class BaseTrainer():
             
         return feat,targets_y
     
+    def pred_unlabeled_data(self):
+        model=self.get_val_model() 
+        count=[0]*self.num_classes
+        fusionMatrix=FusionMatrix(self.num_classes)
+        with torch.no_grad():
+            for batch_idx,(inputs, targets, idx) in enumerate(self.unlabeled_trainloader):
+                inputs, targets = inputs[0].cuda(), targets.cuda()
+                logits_u_w=self.model(inputs) 
+                probs_u_w = torch.softmax(logits_u_w.detach(), dim=-1)
+                max_probs, pred_class = torch.max(probs_u_w, dim=-1)     
+                select_index=torch.nonzero(targets == -1, as_tuple=False).squeeze(1)
+                ood_pred=pred_class[select_index]
+                ood_probs=max_probs[select_index] 
+                if select_index.shape[0]>0:
+                    miscls_idx=torch.nonzero(ood_probs >=self.conf_thres, as_tuple=False).squeeze(1)
+                    for item in miscls_idx:
+                        count[ood_pred[item]]+=1
+                
+                id_select_index=torch.nonzero(targets != -1, as_tuple=False).squeeze(1) 
+                if id_select_index.shape[0]>0:
+                    cls_idx=torch.nonzero(max_probs[id_select_index] >=self.conf_thres, as_tuple=False).squeeze(1)
+                    if cls_idx.shape[0]>0: 
+                        fusionMatrix.update(pred_class[id_select_index][cls_idx].cpu().numpy(),targets[id_select_index][cls_idx].cpu().numpy())
+        acc=fusionMatrix.get_acc_per_class()
+        return count,acc
+                    
+    def pred_test_data(self):
+        model=self.model.eval()
+        # count=[0]*self.num_classes
+        # fusionMatrix=FusionMatrix(self.num_classes)
+        fusionMatrix2=FusionMatrix(self.num_classes)
+        with torch.no_grad():
+            for batch_idx,(inputs, targets, idx) in enumerate(self.test_loader):
+                inputs, targets = inputs.cuda(), targets.cuda()
+                logits_u_w=self.model(inputs) 
+                probs_u_w = torch.softmax(logits_u_w.detach(), dim=-1)
+                max_probs, pred_class = torch.max(probs_u_w, dim=-1)    
+                # cls_idx=torch.nonzero(max_probs >=self.conf_thres, as_tuple=False).squeeze(1)
+                fusionMatrix2.update(pred_class.cpu().numpy(),targets.cpu().numpy())
+                # if cls_idx.shape[0]>0: 
+                #     fusionMatrix.update(pred_class[cls_idx].cpu().numpy(),targets[cls_idx].cpu().numpy())
+        # acc=fusionMatrix.get_acc_per_class()
+        acc0=fusionMatrix2.get_acc_per_class()
+        return acc0
+              
+    
     def ood_detection_knn_pr_test(self,):
         all_features=torch.zeros(self.l_num+self.ul_num
                                  ,self.feature_dim).cuda()
@@ -959,10 +1006,13 @@ class BaseTrainer():
             labeled_feat=[] 
             labeled_y=[] 
             labeled_idx=[]
-            for i,data in enumerate(self.labeled_trainloader):
+            for i,data in enumerate(self.test_labeled_trainloader):
                 inputs_x, targets_x,idx=data[0],data[1],data[2]
+                if len(inputs_x)<=3:
+                    inputs_x=inputs_x[0]
                 inputs_x=inputs_x.cuda()
                 feat=model(inputs_x,return_encoding=True)
+                # feat=model(feat,return_projected_feature=True)
                 labeled_feat.append(feat.cpu())
                 labeled_y.append(targets_x)
                 labeled_idx.append(idx)
@@ -973,11 +1023,12 @@ class BaseTrainer():
             unlabeled_y=[] 
             unlabeled_idx=[]
             for i,data in enumerate(self.unlabeled_trainloader):
-                (inputs_u,_)=data[0]
+                inputs_u=data[0][0]
                 inputs_u=inputs_u.cuda()
                 target=data[1]      
                 idx=data[2]      
                 feat=model(inputs_u,return_encoding=True)
+                # feat=model(feat,return_projected_feature=True)
                 unlabeled_feat.append(feat.cpu())
                 unlabeled_y.append(target)
                 unlabeled_idx.append(idx)
@@ -990,7 +1041,8 @@ class BaseTrainer():
             for i,data in enumerate(self.test_loader):
                 inputs_x, target,idx=data[0],data[1],data[2]
                 inputs_x=inputs_x.cuda()
-                feat=model(inputs_x,return_encoding=True)
+                feat=model(inputs_x,return_encoding=True)                
+                # feat=model(feat,return_projected_feature=True)
                 test_feat.append(feat.cpu())            
                 test_y.append(target)        
                 test_idx.append(idx)

@@ -307,6 +307,8 @@ def plot_ablation_feat_tsne(gts,preds,feats,num_classes=0,title='Test data featu
     plt.close()
     
     return
+ 
+
 def plot_problem_feat_tsne(gts,preds,feats,num_classes=0,titles='Test data feature',alg='', 
                 if_legend=False,filename='',save_path=''):
     fontsize=22   
@@ -315,43 +317,43 @@ def plot_problem_feat_tsne(gts,preds,feats,num_classes=0,titles='Test data featu
     colors_r,colors_w=colors[:num_classes],colors[num_classes:]
     # plt.figure(figsize=(8,8)) 
     plt.figure(figsize=(12,18)) 
-    for i in range(len(titles)):
-        # gt=gts[i]
-        # pred=preds[i]
-        # feat=feats[i]
+    for i in range(len(gts)):
+        gt=gts[i]
+        pred=preds[i]
+        feat=feats[i]
         title=titles[i]
         plt.subplot(3,2,i+1)
         
         c_p = [] 
-        gt=[]
-        pred=[]
-        X_tsne=[]
+        # gt=[]
+        # pred=[]
+        # X_tsne=[]
         
-        # if torch.is_tensor(gt): gt = gt.numpy()
-        # else: gt = gt 
-        # X_tsne = TSNE(n_components=2,random_state=33,early_exaggeration=30).fit_transform(feat.numpy()) 
+        if torch.is_tensor(gt): gt = gt.numpy()
+        else: gt = gt 
+        X_tsne = TSNE(n_components=2,random_state=33,early_exaggeration=30).fit_transform(feat.numpy()) 
         # 保存 X_tsne[j, 0] [j,1] gt[j] pred [j] 
-        logname=os.path.join(save_path[:save_path.rfind('/')+1]+'{}.csv'.format(title))
+        # logname=os.path.join(save_path[:save_path.rfind('/')+1]+'{}.csv'.format(title))
         # with open(logname, 'r') as logfile:
         #     logwriter = csv.writer(logfile, delimiter=',')
         #    # logwriter.writerow(['x', 'y', 'gt','pred']) 
         #     for j in range(len(gt)):
         #         logwriter.writerow([X_tsne[j, 0], X_tsne[j, 1],gt[j],pred[j].item()])
         # csv_reader = csv.reader(open(logname))
-        df=pd.read_csv(logname,sep=' ',delimiter=',',names=['x', 'y', 'gt','pred'])
-        df=np.array(df)
-        for j in range(1,len(df)): 
-            x,y,g,p=df[j]
-            x,y,g,p=float(x),float(y),int(g),int(p)   
-            if g==p:
-                plt.scatter(x, y,s=5, c=colors_r[g],marker='o')#,alpha=0.5 
-            else:            
-                plt.scatter(x,y,s=15, c=colors_w[g],marker='+')#,alpha=0.5 
-        # for j in range(len(X_tsne)):
-        #     if gt[j]==pred[j]:
-        #         plt.scatter(X_tsne[j][0], X_tsne[j][ 1],s=15, c=c_p[j],marker='o',alpha=0.5) 
+        # df=pd.read_csv(logname,sep=' ',delimiter=',',names=['x', 'y', 'gt','pred'])
+        # df=np.array(df)
+        # for j in range(1,len(df)): 
+        #     x,y,g,p=df[j]
+        #     x,y,g,p=float(x),float(y),int(g),int(p)   
+        #     if g==p:
+        #         plt.scatter(x, y,s=5, c=colors_r[g],marker='o')#,alpha=0.5 
         #     else:            
-        #         plt.scatter(X_tsne[j][ 0], X_tsne[j][ 1],s=20, c=c_p[j],marker='+',alpha=0.5) 
+        #         plt.scatter(x,y,s=15, c=colors_w[g],marker='+')#,alpha=0.5 
+        for j in range(len(X_tsne)):
+            if gt[j]==pred[j]:
+                plt.scatter(X_tsne[j][0], X_tsne[j][ 1],s=15, c=colors_r[gt[j]],marker='o',alpha=0.5) 
+            else:            
+                plt.scatter(X_tsne[j][0], X_tsne[j][ 1],s=20, c=colors_w[gt[j]],marker='+',alpha=0.5) 
                 
         # font_zh.set_size(fontsize)    
         plt.xticks([])
