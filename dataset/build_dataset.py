@@ -2,7 +2,7 @@ from .cifar10 import *
 from .cifar100 import *
 from .svhn import get_svhn
 from .stl10 import get_stl10
-from .build_transform import build_transform
+from .build_transform import *
 from dataset.ood_dataset_map import ood_dataset_map
 from dataset.ood_dataset import OOD_Dataset
 from .imagenet import get_imagenet_ssl_dataset
@@ -38,7 +38,24 @@ def build_domain_dataset_for_ood_detection(cfg):
 def build_dataset(cfg,logger=None,test_mode=False):
     dataset_name=cfg.DATASET.NAME
     dataset_root=cfg.DATASET.ROOT 
+    
+    if dataset_name=='semi-iNat':
+        transform_labeled = ListTransform(cfg.SEMI_INAT.LPIPELINES)
+        transform_ulabeled = ListTransform(cfg.SEMI_INAT.UPIPELINES)
+        transform_val = BaseTransform(cfg.SEMI_INAT.VPIPELINE )
+        return get_imagenet_ssl_dataset(root=dataset_root,
+                                        percent=cfg.SEMI_INAT.PERCENT,
+                                        transform_labeled=transform_labeled,
+                                        transform_ulabeled=transform_ulabeled,
+                                        transform_val=transform_val,
+                                        cfg=cfg)
+    
+    
     assert cfg.DATASET.DU.OOD.DATASET in ood_dataset_map.keys()
+    
+    
+    
+    
     ood_dataset=ood_dataset_map[cfg.DATASET.DU.OOD.DATASET] if cfg.DATASET.DU.OOD.ENABLE else 'None'
     
     ood_ratio=cfg.DATASET.DU.OOD.RATIO
@@ -59,7 +76,7 @@ def build_dataset(cfg,logger=None,test_mode=False):
         datasets=get_svhn(dataset_root,  ood_dataset, ood_ratio=ood_ratio, 
                  transform_train=transform_train, transform_train_ul=transform_train_ul, transform_val=transform_val,
                  download=True,cfg=cfg,logger=logger,test_mode=test_mode)
-    elif dataset_name=='semiimagenet':
+    elif dataset_name=='semi-iNat':
         
         percent=cfg.DATASET.IMAGENET.PERCENT, 
         datasets=get_imagenet_ssl_dataset(dataset_root,percent, 

@@ -258,7 +258,7 @@ _C.DATASET.DOMAIN_DATASET_RETURN_INDEX=False
 _C.DATASET.UNLABELED_DATASET_RETURN_INDEX=False
 _C.DATASET.LABELED_DATASET_RETURN_INDEX=False
 _C.DATASET.DL=CN()
-
+_C.DATASET.DL.INCLUDE_ALL=False
 _C.DATASET.GROUP_SPLITS=[3,3,4]
 _C.DATASET.IFS=[100]
 _C.DATASET.OODRS=[0.0]
@@ -268,6 +268,61 @@ _C.DATASET.IMB_TYPE='exp'
 _C.DATASET.DL.NUM_LABELED_HEAD = 1500
 _C.DATASET.DL.IMB_FACTOR_L = 100
 
+
+
+
+seminat_mean = [0.4732, 0.4828, 0.3779]
+seminat_std = [0.2348, 0.2243, 0.2408]
+
+_C.SEMI_INAT=CN()
+_C.SEMI_INAT.PERCENT=10
+_C.SEMI_INAT.L_ANNO_FILE="./data/semi-inat2021/l_train/anno.txt"
+_C.SEMI_INAT.U_ANNO_FILE="./data/semi-inat2021/u_train/u_train.txt"
+_C.SEMI_INAT.V_ANNO_FILE="./data/semi-inat2021/val/anno.txt"
+_C.SEMI_INAT.LPIPELINES=[[
+        dict(type="RandomHorizontalFlip", p=0.5),
+        dict(type="RandomResizedCrop", size=224, scale=(0.2, 1.0)),
+        dict(type="ToTensor"),
+        dict(type="Normalize", mean=seminat_mean, std=seminat_std)
+    ]]
+_C.SEMI_INAT.UPIPELINES=[
+        [
+        dict(type="RandomHorizontalFlip"),
+        dict(type="Resize", size=256),
+        dict(type="CenterCrop", size=224),
+        dict(type="ToTensor"),
+        dict(type="Normalize", mean=seminat_mean, std=seminat_std)
+        ],
+        [
+            dict(type="RandomHorizontalFlip"),
+            dict(type="RandomResizedCrop", size=224, scale=(0.2, 1.0)),
+            dict(type="RandAugmentMC", n=2, m=10),
+            dict(type="ToTensor"),
+            dict(type="Normalize", mean=seminat_mean, std=seminat_std)
+        ],
+        [
+            dict(type="RandomResizedCrop", size=224, scale=(0.2, 1.0)),
+            dict(type="RandomHorizontalFlip"),
+            dict(type="RandomApply",
+                    transforms=[
+                        dict(type="ColorJitter",
+                            brightness=0.4,
+                            contrast=0.4,
+                            saturation=0.4,
+                            hue=0.1),
+                    ],
+                    p=0.8),
+            dict(type="RandomGrayscale", p=0.2),
+            dict(type="ToTensor")
+        ]]
+_C.SEMI_INAT.VPIPELINE=[
+            dict(type="Resize", size=256),
+            dict(type="CenterCrop", size=224),
+            dict(type="ToTensor"),
+            dict(type="Normalize", mean=seminat_mean, std=seminat_std)
+        ]
+
+
 _C.DATASET.DU=CN()
 _C.DATASET.DU.TOTAL_NUM=10000
 _C.DATASET.DU.UNLABELED_BATCH_RATIO=2
@@ -275,6 +330,7 @@ _C.DATASET.DU.ID=CN()
 _C.DATASET.DU.ID.NUM_UNLABELED_HEAD = 3000
 _C.DATASET.DU.ID.IMB_FACTOR_UL = 100
 _C.DATASET.DU.ID.REVERSE_UL_DISTRIBUTION = False
+_C.DATASET.DU.ID.INCLUDE_ALL = False
 
 _C.DATASET.DU.OOD=CN()
 _C.DATASET.DU.OOD.ENABLE=False
