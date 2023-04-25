@@ -241,6 +241,10 @@ def get_root_path(cfg,dataset=None,algorithm=None,labeled_loss_type=None,
              sampler=None,sampler_mixup=None,dual_sampler_enable=None,dual_sampler=None,dual_sampler_mixup=None,
              Branch_setting=None, # 优先
              ):
+    
+    if cfg.DATASET.NAME=='semi-iNat':
+        root_path=get_DL_dataset_alg_path(cfg)
+        return root_path
     parent_path=get_DL_dataset_alg_DU_dataset_OOD_path(cfg,dataset=dataset,algorithm=algorithm,labeled_loss_type=labeled_loss_type,
              num_labeled_head=num_labeled_head,imb_factor_l=imb_factor_l,
              num_unlabeled_head=num_unlabeled_head,imb_factor_ul=imb_factor_ul,

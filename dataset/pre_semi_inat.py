@@ -39,7 +39,7 @@ def convert_ulabeled(folder_dir):
     print("writing unlabeled anno to ", anno_path)
     with open(anno_path, "w") as f:
         for line in anno_list:
-            f.write("{}\n".format(line))
+            f.write("{} -1\n".format(line))
 
 if __name__ == '__main__':
 

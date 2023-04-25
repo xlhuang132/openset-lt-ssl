@@ -99,6 +99,8 @@ class DCSSLTrainer(BaseTrainer):
         u_index=data_u[2]
         u_index=u_index.long().cuda()
         
+        if isinstance(inputs_x,list):
+            inputs_x=inputs_x[0]
         inputs = torch.cat(
                 [inputs_x, inputs_u_w, inputs_u_s, inputs_u_s1],
                 dim=0).cuda()

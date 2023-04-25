@@ -12,7 +12,7 @@ import torch.optim as optim
 from models.feature_queue import FeatureQueue
 import os   
 import datetime
-import faiss
+# import faiss
 from utils.utils import *
 import torch.nn.functional as F
 from utils.plot import plot_pr
@@ -96,12 +96,11 @@ class BaseTrainer():
         self.warmup_enable=cfg.ALGORITHM.PRE_TRAIN.ENABLE
         self.l_num=len(self.labeled_trainloader.dataset)
         self.ul_num=len(self.unlabeled_trainloader.dataset)  
-        self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num
         self.id_masks=torch.ones(self.ul_num).cuda()
         self.ood_masks=torch.zeros(self.ul_num).cuda() 
         self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE
         self.warmup_iter=cfg.ALGORITHM.PRE_TRAIN.WARMUP_EPOCH*self.train_per_step 
-        self.feature_dim=64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8'] else 128 
+        self.feature_dim=64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8','Resnet50'] else 128 
         self.k=cfg.ALGORITHM.OOD_DETECTOR.K    
         self.id_thresh_percent=cfg.ALGORITHM.OOD_DETECTOR.THRESH_PERCENT
         self.ood_detect_fusion = FusionMatrix(2)   
@@ -111,16 +110,18 @@ class BaseTrainer():
         # self.id_threshold=cfg.ALGORITHM.OOD_DETECTOR.ID_THRESHOLD
         self.rebuild_unlabeled_dataset_enable=False        
         self.opearte_before_resume()
-        
-        l_dataset = self.labeled_trainloader.dataset 
-        l_data_np,l_transform = l_dataset.select_dataset(return_transforms=True)
-        new_l_dataset = BaseNumpyDataset(l_data_np, transforms=l_transform,num_classes=self.num_classes)
-        self.test_labeled_trainloader = _build_loader(self.cfg, new_l_dataset,is_train=False)
-        
-        ul_dataset = self.unlabeled_trainloader.dataset 
-        ul_data_np,ul_transform = ul_dataset.select_dataset(return_transforms=True)
-        new_ul_dataset = BaseNumpyDataset(ul_data_np, transforms=ul_transform,num_classes=self.num_classes)
-        self.test_unlabeled_trainloader = _build_loader(self.cfg, new_ul_dataset,is_train=False)
+        if cfg.DATASET.NAME!='semi-iNat':
+            self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num  
+            
+            l_dataset = self.labeled_trainloader.dataset 
+            l_data_np,l_transform = l_dataset.select_dataset(return_transforms=True)
+            new_l_dataset = BaseNumpyDataset(l_data_np, transforms=l_transform,num_classes=self.num_classes)
+            self.test_labeled_trainloader = _build_loader(self.cfg, new_l_dataset,is_train=False)
+            
+            ul_dataset = self.unlabeled_trainloader.dataset 
+            ul_data_np,ul_transform = ul_dataset.select_dataset(return_transforms=True)
+            new_ul_dataset = BaseNumpyDataset(ul_data_np, transforms=ul_transform,num_classes=self.num_classes)
+            self.test_unlabeled_trainloader = _build_loader(self.cfg, new_ul_dataset,is_train=False)
         
             
     def prepare_output_path(self,cfg,logger):
@@ -154,6 +155,15 @@ class BaseTrainer():
         # self.unlabeled_train_iter = iter(self.unlabeled_trainloader)        
         # self.labeled_train_iter = iter(self.labeled_trainloader)   
         dataloaders=build_dataloader(self.cfg,self.logger)
+        
+        if self.cfg.DATASET.NAME=='semi-iNat':
+            self.labeled_trainloader=dataloaders[0]
+            self.labeled_train_iter=iter(self.labeled_trainloader) 
+            self.unlabeled_trainloader=dataloaders[1]
+            self.unlabeled_train_iter=iter(self.unlabeled_trainloader)   
+            self.test_loader=dataloaders[2] 
+            return
+        
         self.domain_trainloader=dataloaders[0]
         self.labeled_trainloader=dataloaders[1]
         self.labeled_train_iter=iter(self.labeled_trainloader)        
@@ -575,7 +585,7 @@ class BaseTrainer():
 
                 # compute output
                 outputs = model(inputs)
-                if len(outputs)==2:
+                if len(outputs)==2 and len(outputs)!=len(targets):
                     outputs=outputs[0]
                 loss = criterion(outputs, targets)
 

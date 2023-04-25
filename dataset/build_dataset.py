@@ -6,6 +6,8 @@ from .build_transform import *
 from dataset.ood_dataset_map import ood_dataset_map
 from dataset.ood_dataset import OOD_Dataset
 from .imagenet import get_imagenet_ssl_dataset
+from .mydataset import MyDataset
+import os
 
 def build_test_dataset(cfg):
     dataset_name=cfg.DATASET.NAME
@@ -43,12 +45,35 @@ def build_dataset(cfg,logger=None,test_mode=False):
         transform_labeled = ListTransform(cfg.SEMI_INAT.LPIPELINES)
         transform_ulabeled = ListTransform(cfg.SEMI_INAT.UPIPELINES)
         transform_val = BaseTransform(cfg.SEMI_INAT.VPIPELINE )
-        return get_imagenet_ssl_dataset(root=dataset_root,
-                                        percent=cfg.SEMI_INAT.PERCENT,
-                                        transform_labeled=transform_labeled,
-                                        transform_ulabeled=transform_ulabeled,
-                                        transform_val=transform_val,
-                                        cfg=cfg)
+        train_unlabeled_dataset = MyDataset(names_file=cfg.SEMI_INAT.U_ANNO_FILE, 
+                                            transform=transform_ulabeled,
+                                            num_classes=cfg.DATASET.NUM_CLASSES)
+
+        train_labeled_dataset = MyDataset(names_file=cfg.SEMI_INAT.L_ANNO_FILE,
+                                          transform=transform_labeled,
+                                            num_classes=cfg.DATASET.NUM_CLASSES)
+        test_dataset = MyDataset(names_file=cfg.SEMI_INAT.V_ANNO_FILE, 
+                                 transform=transform_val,
+                                 num_classes=cfg.DATASET.NUM_CLASSES)
+        logger.info("== 1. Total number of labeled data:{}".format(train_labeled_dataset.total_num)) 
+        logger.info("== ***** Max number:{}   Min Number:{} *****".format(max(train_labeled_dataset.num_per_cls_list),min(train_labeled_dataset.num_per_cls_list)))
+        logger.info("== Labeled class distribution of labeled dataset:{}".format(train_labeled_dataset.num_per_cls_list)) 
+        logger.info("== 2. Total number of unlabeled data:{}".format(train_unlabeled_dataset.total_num)) 
+        logger.info("== Unlabeled class distribution of labeled dataset:{}".format(train_unlabeled_dataset.num_per_cls_list)) 
+        logger.info("== 3. Total number of test data:{}".format(test_dataset.total_num))         
+        logger.info("== Test class distribution of labeled dataset:{}".format(test_dataset.num_per_cls_list)) 
+        return train_labeled_dataset,train_unlabeled_dataset,test_dataset
+        
+        # transform_labeled = ListTransform(cfg.SEMI_INAT.LPIPELINES)
+        # transform_ulabeled = ListTransform(cfg.SEMI_INAT.UPIPELINES)
+        # transform_val = BaseTransform(cfg.SEMI_INAT.VPIPELINE )
+        # return get_imagenet_ssl_dataset(root=dataset_root, 
+        #                                 anno_file=dataset_root,
+        #                                 percent=cfg.SEMI_INAT.PERCENT,
+        #                                 transform_labeled=transform_labeled,
+        #                                 transform_ulabeled=transform_ulabeled,
+        #                                 transform_val=transform_val,
+        #                                 cfg=cfg)
     
     
     assert cfg.DATASET.DU.OOD.DATASET in ood_dataset_map.keys()

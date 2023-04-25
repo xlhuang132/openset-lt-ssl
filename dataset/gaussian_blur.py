@@ -57,4 +57,4 @@ class GaussianBlur(object):
 
         img = self.tensor_to_pil(img)
 
-        return 
+        return img

@@ -12,7 +12,7 @@ class ImageNet(datasets.VisionDataset):
     """  # noqa: E501
     def __init__(self,
                  root,
-                 split,
+                #  split,
                  loader=default_loader,
                  transform=None,
                  target_transform=None) -> None:
@@ -20,7 +20,7 @@ class ImageNet(datasets.VisionDataset):
                                        transform=transform,
                                        target_transform=target_transform)
         self.root = root
-        self.split = split
+        # self.split = split
         samples = self.load_annotations()
         if len(samples) == 0:
             msg = "Found 0 files in subfolders of: {}\n".format(self.root)
@@ -31,11 +31,12 @@ class ImageNet(datasets.VisionDataset):
         self.samples = samples
         self.targets = [s[1] for s in samples]
 
-    def load_annotations(self):
-        with open(os.path.join(self.root, "{}.txt".format(self.split)),
-                  "r") as f:
+    def load_annotations(self): 
+        # with open(os.path.join(self.root, "{}.txt".format(self.split)),
+        
+        with open(self.root,"r") as f:
             samples = [x.strip().rsplit(' ', 1) for x in f.readlines()]
-        samples = [[x[0], int(x[1])] for x in samples]
+        samples = [[x[0], int(x[1]) if len(x)>1 else -1] for x in samples]
         return samples
 
     def __getitem__(self, index: int):
@@ -59,7 +60,7 @@ class ImageNet(datasets.VisionDataset):
 
 
 def get_imagenet_ssl_dataset( 
-    root, percent, transform_labeled,
+    root, percent,anno_file,transform_labeled,
                              transform_ulabeled, transform_val,
                              cfg=None,logger=None):
     """
@@ -72,14 +73,17 @@ def get_imagenet_ssl_dataset(
     Returns:
         tuple: (labeled_dataset, unlabeled_dataset, test_dataset)
     """
-    labeled_dataset = ImageNet(root=root,
-                               split='train',
+    
+    labeled_dataset = ImageNet(root=cfg.SEMI_INAT.L_ANNO_FILE,
+                            #    split='train',
                                transform=transform_labeled)
-    unlabeled_dataset = ImageNet(root=root,
-                                 split='train',
+    unlabeled_dataset = ImageNet(root=cfg.SEMI_INAT.U_ANNO_FILE,
+                                #  split='train',
                                  transform=transform_ulabeled)
 
-    test_dataset = ImageNet(root=root, split='val', transform=transform_val)
+    test_dataset = ImageNet(root=cfg.SEMI_INAT.V_ANNO_FILE, 
+                            # split='val', 
+                            transform=transform_val)
 
     if not os.path.exists(anno_file):
         # randomly sample labeled data on main process (gpu0)

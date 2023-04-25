@@ -18,7 +18,7 @@ class Projector(nn.Module):
                 self.linear_2 = nn.Linear(128, 128)
             elif model_name == 'Resnet50':
                 self.linear_1 = nn.Linear(2048, 512)
-                self.linear_2 = nn.Linear(512, 128) 
+                self.linear_2 = nn.Linear(512, 64) 
         elif expansion == 0:
             self.linear_1 = nn.Linear(128, 128)
             self.linear_2 = nn.Linear(128, 128)

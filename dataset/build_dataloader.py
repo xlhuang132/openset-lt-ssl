@@ -213,51 +213,65 @@ def build_dataloader(cfg,logger=None,test_mode=False):
     num_workers=cfg.DATASET.NUM_WORKERS
      
     datasets= build_dataset(cfg,logger,test_mode=test_mode)
-    train_labeled_set=datasets[0]
-    train_unlabeled_set=datasets[1] 
-    train_domain_set=datasets[2]
-    val_set=datasets[3]
-    test_set=datasets[4] 
-    pre_train_set=datasets[5]
-    pre_train_loader=data.DataLoader(
-        pre_train_set, batch_size=batch_size, 
-        shuffle=True, num_workers=num_workers,drop_last=False)
-    
-    # ===  build dataloader  ===
-    # labeled_trainloader = _build_loader(cfg, train_labeled_set,total_samples=len(train_labeled_set)) 
-    labeled_trainloader = _build_loader(cfg, train_labeled_set ) 
-    
-    unlabeled_trainloader = None
-    if train_unlabeled_set is not None:
-        unlabeled_trainloader = _build_loader(cfg, train_unlabeled_set, has_label=False,total_samples=len(train_unlabeled_set))
-    val_loader = None
-    if val_set is not None:
-        val_loader = _build_loader(cfg, val_set, is_train=False)
-    test_loader = _build_loader(cfg, test_set, is_train=False) 
-    
-    domain_trainloader=None
-    if train_domain_set is not None:
-        domain_trainloader= _build_loader(cfg, train_domain_set, has_label=False,total_samples=len(train_domain_set))
-        # domain_trainloader = data.DataLoader(
-        #     train_domain_set, 
+    if cfg.DATASET.NAME=='semi-iNat':
+        train_labeled_set=datasets[0]
+        train_unlabeled_set=datasets[1] 
+        val_set=datasets[2]
+        labeled_trainloader = _build_loader(cfg, train_labeled_set ) 
+        unlabeled_trainloader = None
+        if train_unlabeled_set is not None:
+            unlabeled_trainloader = _build_loader(cfg, train_unlabeled_set, has_label=False,total_samples=len(train_unlabeled_set))
+        val_loader = None
+        if val_set is not None:
+            val_loader = _build_loader(cfg, val_set, is_train=False)
+        
+        return labeled_trainloader,unlabeled_trainloader,val_loader
+    else:
+        train_labeled_set=datasets[0]
+        train_unlabeled_set=datasets[1] 
+        train_domain_set=datasets[2]
+        val_set=datasets[3]
+        test_set=datasets[4] 
+        pre_train_set=datasets[5]
+        pre_train_loader=data.DataLoader(
+            pre_train_set, batch_size=batch_size, 
+            shuffle=True, num_workers=num_workers,drop_last=False)
+        
+        # ===  build dataloader  ===
+        # labeled_trainloader = _build_loader(cfg, train_labeled_set,total_samples=len(train_labeled_set)) 
+        labeled_trainloader = _build_loader(cfg, train_labeled_set ) 
+        
+        unlabeled_trainloader = None
+        if train_unlabeled_set is not None:
+            unlabeled_trainloader = _build_loader(cfg, train_unlabeled_set, has_label=False,total_samples=len(train_unlabeled_set))
+        val_loader = None
+        if val_set is not None:
+            val_loader = _build_loader(cfg, val_set, is_train=False)
+        test_loader = _build_loader(cfg, test_set, is_train=False) 
+        
+        domain_trainloader=None
+        if train_domain_set is not None:
+            domain_trainloader= _build_loader(cfg, train_domain_set, has_label=False,total_samples=len(train_domain_set))
+            # domain_trainloader = data.DataLoader(
+            #     train_domain_set, 
+            #     batch_size=batch_size, 
+            #     num_workers=num_workers,
+            #     drop_last=False,
+            #     sampler=build_sampler(cfg, train_domain_set,total_samples=domain_samples),
+            #     shuffle=True, 
+            #     ) # 全部训练数据 DL DU OOD
+        # labeled_trainloader = data.DataLoader(
+        #     train_labeled_set, 
         #     batch_size=batch_size, 
-        #     num_workers=num_workers,
-        #     drop_last=False,
-        #     sampler=build_sampler(cfg, train_domain_set,total_samples=domain_samples),
         #     shuffle=True, 
-        #     ) # 全部训练数据 DL DU OOD
-    # labeled_trainloader = data.DataLoader(
-    #     train_labeled_set, 
-    #     batch_size=batch_size, 
-    #     shuffle=True, 
-    #     num_workers=num_workers,
-    #     drop_last=False)
-    # unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=batch_size, shuffle=True, num_workers=num_workers,drop_last=True)
-    # val_loader = data.DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    # test_loader = data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    
-    
-    return  domain_trainloader,labeled_trainloader,unlabeled_trainloader,val_loader,test_loader,pre_train_loader
+        #     num_workers=num_workers,
+        #     drop_last=False)
+        # unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=batch_size, shuffle=True, num_workers=num_workers,drop_last=True)
+        # val_loader = data.DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        # test_loader = data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        
+        
+        return  domain_trainloader,labeled_trainloader,unlabeled_trainloader,val_loader,test_loader,pre_train_loader
 
 def build_mood_dataloader(args,cfg):
     """
