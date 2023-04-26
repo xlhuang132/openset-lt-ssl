@@ -89,7 +89,9 @@ class DCSSLTrainer(BaseTrainer):
             self.unlabeled_train_iter=iter(self.unlabeled_trainloader)
             data_u = self.unlabeled_train_iter.next() 
         
-        inputs_x=data_x[0] 
+        inputs_x_w=data_x[0][0] 
+        inputs_x_s=data_x[0][1] 
+        inputs_x_s2=data_x[0][2] 
         targets_x=data_x[1]
         
         # DU   
@@ -99,10 +101,10 @@ class DCSSLTrainer(BaseTrainer):
         u_index=data_u[2]
         u_index=u_index.long().cuda()
         
-        if isinstance(inputs_x,list):
-            inputs_x=inputs_x[0]
+# D        if isinstance(inputs_x,list):
+#             inputs_x=inputs_x[0]
         inputs = torch.cat(
-                [inputs_x, inputs_u_w, inputs_u_s, inputs_u_s1],
+                [inputs_x_w,inputs_x_s,inputs_x_s2, inputs_u_w, inputs_u_s, inputs_u_s1],
                 dim=0).cuda()
         
         targets_x=targets_x.long().cuda()
@@ -110,17 +112,18 @@ class DCSSLTrainer(BaseTrainer):
         encoding = self.model(inputs,return_encoding=True)
         features=self.model(encoding,return_projected_feature=True)
         logits=self.model(encoding,classifier=True)
-        batch_size=inputs_x.size(0)
+        batch_size=inputs_x_w.size(0)
         logits_x = logits[:batch_size]
-        logits_u_w, logits_u_s, _ = logits[batch_size:].chunk(3)
-        f_u_w, f_u_s1, f_u_s2 = features[batch_size:].chunk(3)
+        logits_u_w, logits_u_s, _ = logits[3*batch_size:].chunk(3)
+        f_l_w, f_l_s1, f_l_s2 = features[3*batch_size:].chunk(3)
+        f_u_w, f_u_s1, f_u_s2 = features[3*batch_size:].chunk(3)
         
         # 1. ce loss           
         loss_cls=self.l_criterion(logits_x, targets_x)
         score_result = self.func(logits_x)
         now_result = torch.argmax(score_result, 1)  
         with torch.no_grad(): 
-            self.update_mean_cov(features[:inputs_x.size(0)].clone().detach(), targets_x.clone().detach())
+            self.update_mean_cov(f_l_w.clone().detach(), targets_x.clone().detach())
          
         # 2. cons loss 
         # filter out low confidence pseudo label by self.cfg.threshold 
@@ -140,8 +143,10 @@ class DCSSLTrainer(BaseTrainer):
         )
         
         # 3. ctr loss 
-        labels = pred_class 
-        features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
+        # labels = pred_class 
+        # features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
+        labels = torch.cat([targets_x,pred_class],dim=0) 
+        features =torch.cat([torch.cat([f_l_s1.unsqueeze(1), f_l_s2.unsqueeze(1)], dim=1),torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)],dim=0) 
         
         # 0. 实例对比学习
         if self.loss_version==0:
@@ -278,24 +283,27 @@ class DCSSLTrainer(BaseTrainer):
                         sample_weight=loss_weight
                 elif self.loss_version==13:
                     if self.sample_weight_enable:
-                        sample_weight=loss_weight*(1.1-max_probs)
+                        sample_weight=loss_weight*(1.2-max_probs)
                     else:
                         sample_weight=loss_weight
-                    
+                # 对高置信度的样本使用硬负硬正，其他就用1    
                 if sample_weight.shape[0]>0:
                     with torch.no_grad(): 
-                        cos_sim= cosine_similarity(f_u_w.detach().cpu().numpy())                        
+                        f=torch.cat([f_l_w,f_u_w],dim=0)
+                        cos_sim= cosine_similarity(f.detach().cpu().numpy())                        
                         # cos_sim= cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
                         cos_sim = torch.from_numpy(cos_sim).cuda()
                         
                         y = labels.contiguous().view(-1, 1)
-                        labeled_mask= torch.eq(y, y.T).float().cuda() 
+                        conf_mask= torch.eq(loss_weight, loss_weight.T).float() 
+                        labeled_mask= torch.eq(y, y.T).float() 
                         pos_mask = labeled_mask
                         neg_mask = 1-labeled_mask  
                         if self.sample_pair_weight_hp_enable:
-                            pos_mask=(1-cos_sim)*labeled_mask 
+                            pos_mask=(1-cos_sim)*labeled_mask*conf_mask+labeled_mask
                         if self.sample_pair_weight_hn_enable:
-                            neg_mask=cos_sim*(1-labeled_mask)+(1-labeled_mask)
+                            neg_mask=cos_sim*(1-labeled_mask)*conf_mask+(1-labeled_mask)
+                       
                   
                     loss_d_ctr = self.loss_contrast(features,  
                                                     pos_mask=pos_mask,
@@ -312,9 +320,9 @@ class DCSSLTrainer(BaseTrainer):
         loss.backward()
         self.optimizer.step()  
         self.losses_d_ctr.update(loss_d_ctr.item(),labels.shape[0]) 
-        self.losses_x.update(loss_cls.item(), inputs_x.size(0))
+        self.losses_x.update(loss_cls.item(), batch_size)
         self.losses_u.update(loss_cons.item(), inputs_u_s.size(0)) 
-        self.losses.update(loss.item(),inputs_x.size(0))
+        self.losses.update(loss.item(),batch_size)
         
         if self.iter % self.cfg.SHOW_STEP==0:
             self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} Avg_Loss_c:{:>5.4f} =='\

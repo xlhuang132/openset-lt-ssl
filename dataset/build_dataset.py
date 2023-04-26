@@ -44,6 +44,8 @@ def build_dataset(cfg,logger=None,test_mode=False):
     if dataset_name=='semi-iNat':
         transform_labeled = ListTransform(cfg.SEMI_INAT.LPIPELINES)
         transform_ulabeled = ListTransform(cfg.SEMI_INAT.UPIPELINES)
+        if cfg.ALGORITHM=='Chasm':
+            transform_labeled=transform_ulabeled
         transform_val = BaseTransform(cfg.SEMI_INAT.VPIPELINE )
         train_unlabeled_dataset = MyDataset(names_file=cfg.SEMI_INAT.U_ANNO_FILE, 
                                             transform=transform_ulabeled,
