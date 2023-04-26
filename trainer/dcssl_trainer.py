@@ -308,7 +308,7 @@ class DCSSLTrainer(BaseTrainer):
                     loss_d_ctr = self.loss_contrast(features,  
                                                     pos_mask=pos_mask,
                                                     neg_mask=neg_mask, 
-                                                    labels=pred_class,                                                   
+                                                    labels=labels,                                                   
                                                     reduction=None)
                     loss_d_ctr = (loss_d_ctr * sample_weight).mean() 
                 else:loss_d_ctr=torch.tensor(0.).cuda()
