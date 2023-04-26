@@ -115,7 +115,7 @@ class DCSSLTrainer(BaseTrainer):
         batch_size=inputs_x_w.size(0)
         logits_x = logits[:batch_size]
         logits_u_w, logits_u_s, _ = logits[3*batch_size:].chunk(3)
-        f_l_w, f_l_s1, f_l_s2 = features[3*batch_size:].chunk(3)
+        f_l_w, f_l_s1, f_l_s2 = features[:3*batch_size].chunk(3)
         f_u_w, f_u_s1, f_u_s2 = features[3*batch_size:].chunk(3)
         
         # 1. ce loss           
@@ -129,8 +129,7 @@ class DCSSLTrainer(BaseTrainer):
         # filter out low confidence pseudo label by self.cfg.threshold 
         with torch.no_grad(): 
             probs_u_w = torch.softmax(logits_u_w.detach(), dim=-1)
-            max_probs, pred_class = torch.max(probs_u_w, dim=-1)  
-        
+            max_probs, pred_class = torch.max(probs_u_w, dim=-1)          
         
         if self.class_aware_thresh_enable:
             loss_weight = max_probs.ge(self.class_thresh[pred_class]).float() 
@@ -146,6 +145,7 @@ class DCSSLTrainer(BaseTrainer):
         # labels = pred_class 
         # features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
         labels = torch.cat([targets_x,pred_class],dim=0) 
+        sample_weight= torch.cat([torch.ones_like(targets_x).cuda(),loss_weight.clone().detach()],dim=0)
         features =torch.cat([torch.cat([f_l_s1.unsqueeze(1), f_l_s2.unsqueeze(1)], dim=1),torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)],dim=0) 
         
         # 0. 实例对比学习
@@ -283,7 +283,7 @@ class DCSSLTrainer(BaseTrainer):
                         sample_weight=loss_weight
                 elif self.loss_version==13:
                     if self.sample_weight_enable:
-                        sample_weight=loss_weight*(1.2-max_probs)
+                        sample_weight=sample_weight*(1.2-torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0) )
                     else:
                         sample_weight=loss_weight
                 # 对高置信度的样本使用硬负硬正，其他就用1    
@@ -293,9 +293,9 @@ class DCSSLTrainer(BaseTrainer):
                         cos_sim= cosine_similarity(f.detach().cpu().numpy())                        
                         # cos_sim= cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
                         cos_sim = torch.from_numpy(cos_sim).cuda()
-                        
                         y = labels.contiguous().view(-1, 1)
-                        conf_mask= torch.eq(loss_weight, loss_weight.T).float() 
+                        weight=sample_weight.contiguous().view(-1, 1)
+                        conf_mask= torch.eq(weight, weight.T).float() 
                         labeled_mask= torch.eq(y, y.T).float() 
                         pos_mask = labeled_mask
                         neg_mask = 1-labeled_mask  
