@@ -7,6 +7,7 @@ import numpy as np
 from dataset.build_dataloader import *
 from loss.build_loss import build_loss 
 import models 
+# import sklearn
 import time 
 import torch.optim as optim
 from models.feature_queue import FeatureQueue
@@ -177,22 +178,29 @@ class BaseTrainer():
         self.pre_train_iter=iter(self.pre_train_loader)  
         return  
     
-    def froze_backbone(self,model):
-        for name, p in model.named_parameters(): 
-            if 'fc' not in name:
-                p.requires_grad = False
+    # def froze_backbone(self,model):
+    #     for name, p in model.named_parameters(): 
+    #         if 'fc' not in name:
+    #             p.requires_grad = False
                 
-    def finetune(self,):
+    def finetune(self,model_resume='best_model.pth'):
+        self.logger.info("*************** Finetuning ***************")
         self.finetune_iters=self.cfg.FINETUNE_STEP
-        model_path=os.path.join(self.model_dir,'checkpoint.pth')
+        model_path=os.path.join(self.model_dir,model_resume)
+        
         self.load_checkpoint(model_path)
-        self.froze_backbone(self.model)
+        # self.froze_backbone(self.model)
+        self.model.froze_backbone()
+        self.model.reset_classifier()   
+        self._rebuild_optimizer(self.model)
         self.build_balanced_dataloader()
         fusion_matrix = FusionMatrix(self.num_classes)
         acc = AverageMeter()      
         self.loss_init()
         start_time = time.time()   
-        for self.iter in range(self.start_iter, self.start_iter+self.finetune_iters+1):
+        self.epoch=1
+        self.start_iter=1
+        for self.iter in range(self.start_iter, self.start_iter+self.finetune_iters):
             return_data=self.finetune_step()
             if return_data is not None:
                 pred,gt=return_data[0],return_data[1]
@@ -207,13 +215,7 @@ class BaseTrainer():
                 self.train_group_accs.append(group_acc)
                 results=self.evaluate()
                 
-                if self.best_val<results[0]:
-                    self.best_val=results[0]
-                    self.best_val_test=results[1]
-                    self.best_val_iter=self.iter
-                    self.save_checkpoint(file_name="best_model.pth")
-                if self.epoch%self.save_epoch==0:
-                    self.save_checkpoint()
+                
                 self.train_losses.append(self.losses.avg)
                 self.logger.info("== Pretraining is enable:{}".format(self.pretraining))
                 self.logger.info('== Train_loss:{:>5.4f}  train_loss_x:{:>5.4f}   train_loss_u:{:>5.4f} '.\
@@ -225,7 +227,13 @@ class BaseTrainer():
                 self.logger.info('==  Test  group_acc: many:{:>5.2f}  medium:{:>5.2f}  few:{:>5.2f}'.format(self.test_group_accs[-1][0]*100,self.test_group_accs[-1][1]*100,self.test_group_accs[-1][2]*100))
                 self.logger.info('== Val_acc:{:>5.2f}  Test_acc:{:>5.2f}'.format(results[0]*100,results[1]*100))
                 self.logger.info('== Best Results: Epoch:{} Val_acc:{:>5.2f}  Test_acc:{:>5.2f}'.format(self.best_val_iter//self.train_per_step,self.best_val*100,self.best_val_test*100))
-              
+                if self.best_val<results[0]:
+                    self.best_val=results[0]
+                    self.best_val_test=results[1]
+                    self.best_val_iter=self.iter
+                    self.save_checkpoint(file_name="best_model_finetune.pth")
+                if self.epoch%self.save_epoch==0:
+                    self.save_checkpoint(file_name="checkpoint_finetune.pth")
                 # reset 
                 fusion_matrix = FusionMatrix(self.num_classes)
                 acc = AverageMeter()                 
@@ -236,32 +244,89 @@ class BaseTrainer():
         return
     
     def finetune_step(self):
-        self.model.train() 
+        # self.model.train() 
+        # loss =0
+        # # DL  
+        # try:
+        #     data = self.labeled_train_iter.next()    
+        # except:            
+        #     self.labeled_train_iter=iter(self.labeled_trainloader)            
+        #     data= self.labeled_train_iter.next()  
+        # inputs=data[0].cuda()
+        # targets_x=data[1].long().cuda() 
+        
+        # logits = self.model(inputs)   
+        # score_result = self.func(logits)
+        # now_result = torch.argmax(score_result, 1)  
+         
+        # loss=self.l_criterion(logits, targets_x) 
+        # self.optimizer.zero_grad()
+        # loss.backward()
+        # self.optimizer.step()
+        # self.losses.update(loss.item(),inputs.size(0))
+        
+        # if self.iter % self.cfg.SHOW_STEP==0:
+        #     self.logger.info('== Finetune Epoch:{} Step:[{}|{}] Avg_Loss_x:{:>5.4f}   =='\
+        #         .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses.val))
+        # return  now_result.cpu().numpy(), targets_x.cpu().numpy()  
+        self.model.train()
         loss =0
         # DL  
-        try:
-            data = self.labeled_train_iter.next()    
-        except:            
-            self.labeled_train_iter=iter(self.labeled_trainloader)            
-            data= self.labeled_train_iter.next()  
-        inputs=data[0].cuda()
-        targets=data[1].long().cuda() 
+        try:        
+            inputs_x, targets_x,_ = self.labeled_train_iter.next() 
+        except:
+            self.labeled_train_iter=iter(self.labeled_trainloader)
+            inputs_x, targets_x,_ = self.labeled_train_iter.next() 
+        if  isinstance(inputs_x,list)  :
+            inputs_x=inputs_x[0]
         
-        logits = self.model(inputs)   
-        score_result = self.func(logits)
-        now_result = torch.argmax(score_result, 1)  
+        # DU   
+        try:       
+            data = self.unlabeled_train_iter.next()
+        except:
+            self.unlabeled_train_iter=iter(self.unlabeled_trainloader)
+            data = self.unlabeled_train_iter.next()
+        inputs_u=data[0][0]
+        inputs_u2=data[0][1]
          
-        loss=self.l_criterion(logits, targets) 
+        inputs_x, targets_x = inputs_x.cuda(), targets_x.long().cuda(non_blocking=True)        
+        inputs_u , inputs_u2= inputs_u.cuda(),inputs_u2.cuda()          
+        x=torch.cat((inputs_x,inputs_u,inputs_u2),dim=0) 
+        
+        # fixmatch pipelines
+        logits_concat = self.model(x)
+        num_labels=inputs_x.size(0)
+        logits_x = logits_concat[:num_labels]
+
+        # loss computation 
+        lx=self.l_criterion(logits_x, targets_x.long()) 
+        # compute 1st branch accuracy
+        score_result = self.func(logits_x)
+        now_result = torch.argmax(score_result, 1)         
+        logits_weak, logits_strong = logits_concat[num_labels:].chunk(2)
+        with torch.no_grad():
+            # compute pseudo-label
+            p = logits_weak.softmax(dim=1)  # soft pseudo labels
+            confidence, pred_class = torch.max(p.detach(), dim=1) 
+            loss_weight = confidence.ge(self.conf_thres).float()
+         
+        lu = self.ul_criterion(
+            logits_strong, pred_class, weight=loss_weight, avg_factor=pred_class.size(0)
+        ) 
+        loss+=lx+lu
+        # record loss
+        self.losses.update(loss.item(), inputs_x.size(0))
+        self.losses_x.update(lx.item(), inputs_x.size(0))
+        self.losses_u.update(lu.item(), inputs_u.size(0)) 
+
+        # compute gradient and do SGD step
         self.optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
-        self.losses.update(loss.item(),inputs.size(0))
-        
+        self.optimizer.step() 
         if self.iter % self.cfg.SHOW_STEP==0:
-            self.logger.info('== Finetune Epoch:{} Step:[{}|{}] Avg_Loss_x:{:>5.4f}   =='\
-                .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses.val))
-        return  now_result.cpu().numpy(), targets_x.cpu().numpy()  
-     
+             self.logger.info('== Finetune Epoch:{} Step:[{}|{}] Avg_Loss_x:{:>5.4f} Avg_Loss_u:{:>5.4f} =='\
+                .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses_x.avg,self.losses_u.avg))
+        return now_result.cpu().numpy(), targets_x.cpu().numpy()
     
     def build_balanced_dataloader(self):
         l_dataset = self.labeled_trainloader.dataset
@@ -521,6 +586,31 @@ class BaseTrainer():
             return val_acc,test_acc,test_class_acc
         return [val_acc,test_acc]
     
+    
+    def get_case_pred_gt(self): 
+        model=self.get_val_model()
+        model.eval() 
+        with torch.no_grad():
+            for  i, (inputs, targets, _) in enumerate(self.test_loader):
+                inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+                # compute output
+                outputs = model(inputs,training=False) 
+                probs_u_w = torch.softmax(outputs.detach(), dim=-1)
+                max_probs, pred_class = torch.max(probs_u_w, dim=-1)  
+                return max_probs[max_probs.shape[0]//3],pred_class[pred_class.shape[0]//3] 
+
+    def get_case_cosine(self): 
+        model=self.get_val_model()
+        model.eval() 
+        with torch.no_grad():
+            for  i, (inputs, targets, _) in enumerate(self.test_loader):
+                inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+                # compute output
+                encoding = model(inputs,return_encoding=True,training=False) 
+                feature=model(encoding,return_projected_feature=True,training=False) 
+                cos_sim= cosine_similarity(feature.detach(),feature.detach()) 
+                return cos_sim.cpu().numpy()
+    
     def get_test_data_pred_gt_feat(self):
         model=self.get_val_model()
         model.eval()
@@ -534,6 +624,32 @@ class BaseTrainer():
                 # compute output
                 outputs = model(inputs,training=False)
                 feature=model(inputs,return_encoding=True)
+                # feature=model(feature,return_projected_feature=True)
+                score_result = self.func(outputs)
+                now_result = torch.argmax(score_result, 1)   
+                gt.append(targets.cpu())   
+                pred.append(now_result.cpu())
+                feat.append(feature.cpu())
+            pred=torch.cat(pred,dim=0)
+            gt=torch.cat(gt,dim=0)
+            feat=torch.cat(feat,dim=0)
+        return gt,pred,feat
+               
+    def get_train_dl_data_pred_gt_feat(self):
+        model=self.get_val_model()
+        model.eval()
+        pred=[]
+        gt=[]
+        feat=[]
+        with torch.no_grad():
+            for  i, (inputs, targets, _) in enumerate(self.test_labeled_trainloader):
+                if isinstance(inputs,list):
+                    inputs=inputs[0]
+                inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+                
+                # compute output
+                outputs = model(inputs)
+                feature=model(inputs,return_encoding=True)
                 feature=model(feature,return_projected_feature=True)
                 score_result = self.func(outputs)
                 now_result = torch.argmax(score_result, 1)   
@@ -545,20 +661,22 @@ class BaseTrainer():
             feat=torch.cat(feat,dim=0)
         return gt,pred,feat
     
-    
-    def get_train_dl_data_pred_gt_feat(self):
+    def get_train_du_data_pred_gt_feat(self):
         model=self.get_val_model()
         model.eval()
         pred=[]
         gt=[]
         feat=[]
         with torch.no_grad():
-            for  i, (inputs, targets, _) in enumerate(self.labeled_trainloader):
+            for  i, (inputs, targets, _) in enumerate(self.test_unlabeled_trainloader):
+                if isinstance(inputs,list):
+                    inputs=inputs[0]
                 inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
-
+                
                 # compute output
                 outputs = model(inputs)
                 feature=model(inputs,return_encoding=True)
+                feature=model(feature,return_projected_feature=True)
                 score_result = self.func(outputs)
                 now_result = torch.argmax(score_result, 1)   
                 gt.append(targets.cpu())   
@@ -567,8 +685,7 @@ class BaseTrainer():
             pred=torch.cat(pred,dim=0)
             gt=torch.cat(gt,dim=0)
             feat=torch.cat(feat,dim=0)
-        return gt,pred,feat
-                
+        return gt,pred,feat    
     
     def eval_loop(self,model,valloader,criterion):
         losses = AverageMeter() 

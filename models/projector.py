@@ -25,6 +25,18 @@ class Projector(nn.Module):
         else:
             self.linear_1 = nn.Linear(512*expansion, 512)
             self.linear_2 = nn.Linear(512, 128)
+            
+        # self.head=nn.Sequential(
+        #     nn.Linear(dim, hidden_size, bias=False),
+        #     nn.BatchNorm1d(hidden_size),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_size, hidden_size, bias=False),
+        #     nn.BatchNorm1d(hidden_size),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_size, projection_size, bias=False),
+        #     nn.BatchNorm1d(projection_size, affine=False)
+        # )
+
 
     def forward(self, x, internal_output_list=False,normalized=False):
             

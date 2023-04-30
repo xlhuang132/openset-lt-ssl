@@ -7,6 +7,9 @@ GPU_MODE: True
 ALGORITHM:
   NAME: "baseline" 
   CONFIDENCE_THRESHOLD: 0.95  
+  DCSSL:   
+    CONTRAST_THRESH: 0.9 
+    LOSS_VERSION: 12
 MODEL:
   NAME: "WRN_28_2"
    
@@ -32,5 +35,11 @@ DATASET:
     
      
 # ======= 画图分析 =======
-# 1 - 
-ANALYSE_TYPE: [1] 
+# 1. 统计置信度和与类中心距离的矩阵并热力图可视化
+# 2. 统计OOD样本被错分为哪个类
+
+    
+# 3. 可视化特征空间
+# 4. motivation 实验，统计硬正硬负分数
+# 5. 统计 train-test数据之间的特征均值方差之差
+ANALYSE_TYPE: [3] 

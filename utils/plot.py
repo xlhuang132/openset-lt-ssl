@@ -13,6 +13,7 @@ from scipy.interpolate import interp1d
 import mpl_toolkits.axisartist as axisartist
 import csv
 import matplotlib.font_manager as fm
+import matplotlib
  
 plt.rcParams['font.family'] = 'DeJavu Serif'
 plt.rcParams['font.sans-serif'] = ['Helvetica']
@@ -28,7 +29,50 @@ def plot_pd_heatmap(results,save_path=''):
     if save_path!='': 
         plt.savefig(save_path, bbox_inches='tight')
     plt.close()
+    
+def plot_pd_heatmaps(results,r=1,c=1,save_path='',title='',subtitles=[]):
+    assert len(results)==r*c
+    fig =plt.figure(figsize=(2+c*4,r*4),dpi=300) 
+    # norm = matplotlib.colors.Normalize(vmin=0, vmax=1000)
+    for i in range(r):
+        for j in range(c):
+            plt.subplot(r,c,i*r+j+1)
+            # if i*r+j+1==len(results):
+            #     sns.heatmap(data=results[i*r+j])
+            # else:
+            
+            h=sns.heatmap(data=results[i*r+j])
+            # h=sns.heatmap(data=results[i*r+j],cbar=False)
+            # h3 =plt.contourf(results[i*r+j],cmap = plt.cm.coolwarm,norm = norm)
+            # h3 =plt.contourf(results[i*r+j],cmap = plt.cm.coolwarm)
+            plt.title(subtitles[i*r+j])
+    plt.suptitle(title)
+    fig.subplots_adjust(wspace =0.05)
+    # cb = plt.colorbar(h.collections[0]) #显示colorbar
+    # cb.ax.tick_params()  # 设置colorbar刻度字体大小。
+    # #colorbar 左 下 宽 高 
+    # l = 0.92
+    # b = 0.12
+    # w = 0.015
+    # h = 1 - 2*b 
 
+    # #对应 l,b,w,h；设置colorbar位置；
+    # rect = [l,b,w,h] 
+    # cbar_ax = fig.add_axes(rect) 
+    # cb = plt.colorbar(h3, cax=cbar_ax)
+
+    # #设置colorbar标签字体等
+    # cb.ax.tick_params(labelsize=16)  #设置色标刻度字体大小。
+    # font = {'family' : 'serif',
+    # #       'color'  : 'darkred',
+    #     'color'  : 'black',
+    #     'weight' : 'normal',
+    #     'size'   : 16,
+    #     } 
+    if save_path!='': 
+        plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    
 def plot_pr(precision,recall,save_path=''):
     assert len(precision)==len(recall) and len(precision)>0
     fontsize=16

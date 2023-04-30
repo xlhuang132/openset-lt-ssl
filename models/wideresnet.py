@@ -77,6 +77,14 @@ class WideResNet(nn.Module):
         self.num_classes = num_classes
         self.out_features = out_features 
     
+    def froze_backbone(self,):
+        for name, p in self.named_parameters(): 
+            if 'fc' not in name:
+                p.requires_grad = False
+        
+    def reset_classifier(self,):
+        self.fc = Classifier(self.encoder.out_features, self.encoder.num_classes).cuda()
+    
     def forward(self, x,return_encoding=False,return_projected_feature=False,classifier=False,training=True): 
         if return_projected_feature:# 输入的encoding
             # pfeat = self.l2norm(self.projector(x))
