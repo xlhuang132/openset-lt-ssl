@@ -12,11 +12,11 @@ class FeatureQueue:
         self.feat_dim = cfg.MODEL.QUEUE.FEAT_DIM
         self.max_size = cfg.MODEL.QUEUE.MAX_SIZE
  
-        # self.bank = defaultdict(lambda: torch.empty(0, self.feat_dim).cuda())
-        # self.prototypes = torch.zeros(self.num_classes, self.feat_dim).cuda()
+        self.bank = defaultdict(lambda: torch.empty(0, self.feat_dim).cuda())
+        self.prototypes = torch.zeros(self.num_classes, self.feat_dim).cuda()
         
-        self.bank = defaultdict(lambda: torch.empty(0, self.feat_dim))
-        self.prototypes = torch.zeros(self.num_classes, self.feat_dim)
+        # self.bank = defaultdict(lambda: torch.empty(0, self.feat_dim))
+        # self.prototypes = torch.zeros(self.num_classes, self.feat_dim)
 
         self.classwise_max_size = classwise_max_size
         self.bal_queue = bal_queue

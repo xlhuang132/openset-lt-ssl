@@ -1,7 +1,6 @@
 
 
-OUTPUT_DIR: "outputs/"
-SEED: 7
+OUTPUT_DIR: "outputs/" 
 SHOW_STEP: 100
 SAVE_EPOCH: 10
 MAX_EPOCH: 500
@@ -20,19 +19,19 @@ DATASET:
   NUM_CLASSES: 10
   GROUP_SPLITS: [3,3,4]
   
-  NUM_VALID: 0
-  IFS: [1]
+  # NUM_VALID: 0
+  IFS: [100]
   OODRS: [0.0]  
   DL:
-    NUM_LABELED_HEAD: 372 #1500
+    NUM_LABELED_HEAD: 1500 #372 #
     # IMB_FACTOR_L: 100
   DU: 
     ID:
-      NUM_UNLABELED_HEAD:  744 # 3000 #4960 #
+      NUM_UNLABELED_HEAD:  3000 #4960 # 744 #
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      INCLUDE_ALL: True
+      # INCLUDE_ALL: True
       DATASET: 'TIN'
       RATIO: 0.0 
   NUM_WORKERS: 4

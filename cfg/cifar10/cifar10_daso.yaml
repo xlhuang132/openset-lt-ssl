@@ -1,14 +1,12 @@
 
 
-OUTPUT_DIR: "outputs_ood/"
-SEED : 7 
+OUTPUT_DIR: "outputs/" 
 SHOW_STEP: 100
 SAVE_EPOCH: 10
-MAX_EPOCH: 300
+MAX_EPOCH: 500
 TRAIN_STEP: 500  
 ALGORITHM:
-  NAME: "DASO" # Fixmatch+daso
-  CONFIDENCE_THRESHOLD: 0.95  
+  NAME: "DASO" # Fixmatch+daso 
   DASO:
     WITH_DIST_AWARE: True
     # DIST_TEMP=1.5 if \gamma_l==\gamma_u else 0.3 for CIFAR10.
@@ -17,20 +15,20 @@ ALGORITHM:
     INTERP_ALPHA: 0.5
     PSA_LOSS_WEIGHT: 1.0  # loss weight for semantic alignment loss
     WARMUP_ITER: 5000
-  PRE_TRAIN: 
-    ENABLE: True 
-    WARMUP_EPOCH: 100
-    SimCLR: 
-      ENABLE: True
-      TEMPERATURE: 0.5
-    OOD_DETECTOR:
-      TEMPERATURE: 0.5
-      MAGNITUDE: 0.0014 #  
-      THRESHOLD: 0.10004
-      DOMAIN_Y_UPDATE_ITER: 5
-      K: 10 # 'Top k most similar images used to predict the label'
-      OOD_THRESHOLD: 0.5
-      ID_THRESHOLD: 0.5
+  # PRE_TRAIN: 
+  #   ENABLE: True 
+  #   WARMUP_EPOCH: 100
+  #   SimCLR: 
+  #     ENABLE: True
+  #     TEMPERATURE: 0.5
+  #   OOD_DETECTOR:
+  #     TEMPERATURE: 0.5
+  #     MAGNITUDE: 0.0014 #  
+  #     THRESHOLD: 0.10004
+  #     DOMAIN_Y_UPDATE_ITER: 5
+  #     K: 10 # 'Top k most similar images used to predict the label'
+  #     OOD_THRESHOLD: 0.5
+  #     ID_THRESHOLD: 0.5
 
 MODEL:
   NAME: "WRN_28_2" #'Resnet34' #
@@ -40,7 +38,7 @@ MODEL:
     UNLABELED_LOSS: "CrossEntropyLoss"   
 
   QUEUE:
-    FEAT_DIM:  128 # 512 #-wrn_28_2
+    FEAT_DIM: 128 # 512 #-wrn_28_2
     MAX_SIZE: 256  
   
 DATASET:
@@ -50,7 +48,7 @@ DATASET:
   GROUP_SPLITS: [3,3,4]
   
   IFS: [100]
-  OODRS: [0.5]  
+  OODRS: [0.0]  
   DL:
     NUM_LABELED_HEAD: 1500
     IMB_FACTOR_L: 100
@@ -63,7 +61,7 @@ DATASET:
       ENABLE: True
       DATASET: 'TIN'
       RATIO: 0.0 # n(ood)/n(du)  
-    
-    UNLABELED_BATCH_RATIO: 2
+      # INCLUDE_ALL: True  
+     
    
 

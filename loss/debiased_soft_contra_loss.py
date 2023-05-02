@@ -530,123 +530,19 @@ class DebiasSoftConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, features, 
-                labels=None, 
-                pos_mask=None,
-                neg_mask=None, 
-                mask=None,
-                select_matrix=None,
-                reduction='mean'):
-            
-        batch_size = features.shape[0]
-        labels = labels.contiguous().view(-1, 1)
-        if labels.shape[0] != batch_size:
-            raise ValueError('Num of labels does not match num of features') 
-        
-        contrast_count = features.shape[1]
-        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0) #torch.Size([20480])= torch.Size([320, 64])
-        if self.contrast_mode == 'one':
-            anchor_feature = features[:, 0]
-            anchor_count = 1
-        elif self.contrast_mode == 'all':
-            anchor_feature = contrast_feature
-            anchor_count = contrast_count
-        else:
-            raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
-
-        # compute logits sim
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
-
-        # tile mask 
-        label_mask = torch.eq(labels, labels.T).float().cuda()  
-        label_mask = label_mask.repeat(anchor_count, contrast_count)
-     
-        pos_mask = pos_mask.repeat(anchor_count, contrast_count) 
-        neg_mask = neg_mask.repeat(anchor_count, contrast_count) 
-        
-        # mask-out self-contrast cases m_ii
-        logits_mask = torch.scatter(
-            torch.ones_like(pos_mask),
-            1,
-            torch.arange(batch_size * anchor_count).view(-1, 1).cuda(),
-            0
-        )
-        label_mask=label_mask*logits_mask
-        pos_mask = pos_mask * logits_mask # mask self-self 
-        mask=pos_mask+neg_mask
-        
-        log_mask=torch.log(mask)
-        log_mask[log_mask==float("-inf")]=0
-        # compute log_prob
-        exp_logits = torch.exp(logits) * logits_mask
-        log_prob = log_mask + logits - torch.log((mask*exp_logits).sum(1, keepdim=True) + 1e-9)
-
-        # compute mean of log-likelihood over positive
-        # sum_mask = mask.sum(dim=1) 
-        # sum_mask[sum_mask == 0] = 1
-        # mean_log_prob_pos = (pos_mask * log_prob).sum(1) / sum_mask
-        sum_mask = label_mask.sum(dim=1) # 除以 |P(i)|
-        sum_mask[sum_mask == 0] = 1
-        mean_log_prob_pos = (label_mask * log_prob).sum(1) / sum_mask
-        
-        
-        # loss
-        loss = -mean_log_prob_pos #torch.Size([384]) 
-        loss = loss.view(anchor_count, batch_size)
-        if reduction=='mean':
-            return loss.mean()
-        else:
-            return loss
-
     # def forward(self, features, 
-    #         max_probs=None, 
-    #         labels=None, 
-    #         mask=None, 
-    #         pos_mask=None,
-    #         neg_mask=None, 
-    #         reduction="mean", 
-    #         select_matrix=None):
-        
-    #     batch_size = features.shape[0]
-        
-    #     if mask is None and max_probs is None and labels is None:
-    #         mask = torch.eye(batch_size, dtype=torch.float32).cuda()
-    #     elif labels is None and max_probs is None:  
-    #         mask=mask
-    #     # mask: 偏置分数 x
-    #     # 仅仅使用 pi*pj
-    #     else:
-    #         labels = labels.contiguous().view(-1, 1)
-    #         if labels.shape[0] != batch_size:
-    #             raise ValueError('Num of labels does not match num of features')
+    #             labels=None, 
+    #             pos_mask=None,
+    #             neg_mask=None, 
+    #             mask=None,
+    #             select_matrix=None,
+    #             reduction='mean'):
             
-    #         # pi*pj 
-    #         if max_probs is not None and labels is not None: 
-    #             label_mask = torch.eq(labels, labels.T).float().cuda()
-    #             max_probs = max_probs.contiguous().view(-1, 1)
-    #             score_mask = torch.matmul(max_probs, max_probs.T)
-    #             label_mask = label_mask.float().cuda()
-    #             label_mask = label_mask.mul(score_mask) 
-    #             # pi*pj*bias_score
-    #             if mask is not None:
-    #                 mask=label_mask*mask
-    #             else:
-    #                 mask=label_mask
-    #         # bias_score + labels
-    #         elif max_probs is None and mask is not None and labels is not None:
-    #             # label_mask 同类的mask mask:cosine相似度
-    #             label_mask = torch.eq(labels, labels.T).float().cuda() 
-    #             mask = label_mask * mask  
-    #         # labels 
-    #         else:
-    #             label_mask = torch.eq(labels, labels.T).float().cuda()
-    #             mask = label_mask
-
+    #     batch_size = features.shape[0]
+    #     labels = labels.contiguous().view(-1, 1)
+    #     if labels.shape[0] != batch_size:
+    #         raise ValueError('Num of labels does not match num of features') 
+        
     #     contrast_count = features.shape[1]
     #     contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0) #torch.Size([20480])= torch.Size([320, 64])
     #     if self.contrast_mode == 'one':
@@ -658,7 +554,7 @@ class DebiasSoftConLoss(nn.Module):
     #     else:
     #         raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
 
-    #     # compute logits
+    #     # compute logits sim
     #     anchor_dot_contrast = torch.div(
     #         torch.matmul(anchor_feature, contrast_feature.T),
     #         self.temperature)
@@ -666,40 +562,144 @@ class DebiasSoftConLoss(nn.Module):
     #     logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
     #     logits = anchor_dot_contrast - logits_max.detach()
 
-    #     # tile mask
-    #     mask = mask.repeat(anchor_count, contrast_count)
-
-    #     # mask-out self-contrast cases 1-torch.eye
+    #     # tile mask 
+    #     label_mask = torch.eq(labels, labels.T).float().cuda()  
+    #     label_mask = label_mask.repeat(anchor_count, contrast_count)
+     
+    #     pos_mask = pos_mask.repeat(anchor_count, contrast_count) 
+    #     neg_mask = neg_mask.repeat(anchor_count, contrast_count) 
+        
+    #     # mask-out self-contrast cases m_ii
     #     logits_mask = torch.scatter(
-    #         torch.ones_like(mask),
+    #         torch.ones_like(pos_mask),
     #         1,
     #         torch.arange(batch_size * anchor_count).view(-1, 1).cuda(),
     #         0
     #     )
-    #     mask = mask * logits_mask # mask self-self
-
+    #     label_mask=label_mask*logits_mask
+    #     pos_mask = pos_mask * logits_mask # mask self-self 
+    #     mask=pos_mask+neg_mask
+        
+    #     log_mask=torch.log(mask)
+    #     log_mask[log_mask==float("-inf")]=0
     #     # compute log_prob
     #     exp_logits = torch.exp(logits) * logits_mask
-    #     log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + 1e-9)
+    #     log_prob = log_mask + logits - torch.log((mask*exp_logits).sum(1, keepdim=True) + 1e-9)
 
     #     # compute mean of log-likelihood over positive
-        
-    #     sum_mask = mask.sum(1)
+    #     # sum_mask = mask.sum(dim=1) 
+    #     # sum_mask[sum_mask == 0] = 1
+    #     # mean_log_prob_pos = (pos_mask * log_prob).sum(1) / sum_mask
+    #     sum_mask = label_mask.sum(dim=1) # 除以 |P(i)|
     #     sum_mask[sum_mask == 0] = 1
-    #     if select_matrix is not None:
-    #         select_matrix = select_matrix.repeat(anchor_count, contrast_count)
-    #         mean_log_prob_pos = (mask*select_matrix * log_prob).sum(1) / sum_mask
-    #     else:
-    #         mean_log_prob_pos = (mask * log_prob).sum(1) / sum_mask
+    #     mean_log_prob_pos = (label_mask * log_prob).sum(1) / sum_mask
         
-    #     # mean_log_prob_pos = (mask * log_prob).sum(1) / (((1-mask) * log_prob).sum(1) + 1e-9)
-
+        
     #     # loss
-    #     loss = -mean_log_prob_pos #torch.Size([384])
-    #     loss = loss.view(anchor_count, batch_size) #torch.Size([2, 128])
-    #     # loss = loss.mean()
-    #     if reduction == "mean":
-    #         loss = loss.mean()
+    #     loss = -mean_log_prob_pos #torch.Size([384]) 
+    #     loss = loss.view(anchor_count, batch_size)
+    #     if reduction=='mean':
+    #         return loss.mean()
+    #     else:
+    #         return loss
 
-    #     return loss
+    def forward(self, features, 
+            max_probs=None, 
+            labels=None, 
+            mask=None, 
+            pos_mask=None,
+            neg_mask=None, 
+            reduction="mean", 
+            select_matrix=None):
+        
+        batch_size = features.shape[0]
+        
+        if mask is None and max_probs is None and labels is None:
+            mask = torch.eye(batch_size, dtype=torch.float32).cuda()
+        elif labels is None and max_probs is None:  
+            mask=mask
+        # mask: 偏置分数 x
+        # 仅仅使用 pi*pj
+        else:
+            labels = labels.contiguous().view(-1, 1)
+            if labels.shape[0] != batch_size:
+                raise ValueError('Num of labels does not match num of features')
+            
+            # pi*pj 
+            if max_probs is not None and labels is not None: 
+                label_mask = torch.eq(labels, labels.T).float().cuda()
+                max_probs = max_probs.contiguous().view(-1, 1)
+                score_mask = torch.matmul(max_probs, max_probs.T)
+                label_mask = label_mask.float().cuda()
+                label_mask = label_mask.mul(score_mask) 
+                # pi*pj*bias_score
+                if mask is not None:
+                    mask=label_mask*mask
+                else:
+                    mask=label_mask
+            # bias_score + labels
+            elif max_probs is None and mask is not None and labels is not None:
+                # label_mask 同类的mask mask:cosine相似度
+                label_mask = torch.eq(labels, labels.T).float().cuda() 
+                mask = label_mask * mask  
+            # labels 
+            else:
+                label_mask = torch.eq(labels, labels.T).float().cuda()
+                mask = label_mask
+
+        contrast_count = features.shape[1]
+        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0) #torch.Size([20480])= torch.Size([320, 64])
+        if self.contrast_mode == 'one':
+            anchor_feature = features[:, 0]
+            anchor_count = 1
+        elif self.contrast_mode == 'all':
+            anchor_feature = contrast_feature
+            anchor_count = contrast_count
+        else:
+            raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
+
+        # compute logits
+        anchor_dot_contrast = torch.div(
+            torch.matmul(anchor_feature, contrast_feature.T),
+            self.temperature)
+        # for numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        # tile mask
+        mask = mask.repeat(anchor_count, contrast_count)
+
+        # mask-out self-contrast cases 1-torch.eye
+        logits_mask = torch.scatter(
+            torch.ones_like(mask),
+            1,
+            torch.arange(batch_size * anchor_count).view(-1, 1).cuda(),
+            0
+        )
+        mask = mask * logits_mask # mask self-self
+
+        # compute log_prob
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + 1e-9)
+
+        # compute mean of log-likelihood over positive
+        
+        sum_mask = mask.sum(1)
+        sum_mask[sum_mask == 0] = 1
+        if select_matrix is not None:
+            select_matrix = select_matrix.repeat(anchor_count, contrast_count)
+            mean_log_prob_pos = (mask*select_matrix * log_prob).sum(1) / sum_mask
+        else:
+            mean_log_prob_pos = (mask * log_prob).sum(1) / sum_mask
+        
+        # mean_log_prob_pos = (mask * log_prob).sum(1) / (((1-mask) * log_prob).sum(1) + 1e-9)
+
+        # loss
+        loss = -mean_log_prob_pos #torch.Size([384])
+        loss = loss.view(anchor_count, batch_size) #torch.Size([2, 128])
+        # loss = loss.mean()
+        if reduction == "mean":
+            loss = loss.mean()
+
+        return loss
 

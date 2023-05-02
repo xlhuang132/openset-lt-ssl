@@ -123,12 +123,15 @@ def analyse1(cfg):
  
 # 2. 统计OOD样本被错分为哪个类
 def analyse2(cfg):
-    algs=['MixMatch','FixMatch', 'OpenMatch' ,'CCSSL','DCSSL']
+    algs=['FixMatch','DCSSL','MixMatch','OpenMatch' ,'DCSSL']#['MixMatch','FixMatch', 'OpenMatch' ,'CCSSL','DCSSL']
     mis_ood=[]
     cls_id=[]
+    legends=['FixMatch-0.95','FixMatch-CT','MixMatch','OpenMatch' ,'DeCAB (Ours)']
+    i=0
     for item in algs:
         cfg.defrost()
         cfg.ALGORITHM.NAME=item
+        if i==2:cfg.ALGORITHM.DCSSL.LOSS_VERSION=12 
         cfg.freeze() 
         
         # ===== prepare pic path ====
@@ -141,16 +144,22 @@ def analyse2(cfg):
         trainer=build_trainer(cfg)
         trainer.load_checkpoint(model_path)
         result=trainer.pred_unlabeled_data() #pred_test_data() # count,acc
-        mis_ood.append(list(result))
-        cls_id.append(list(result))
-    # path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'mis_du_ood.jpg')
-    # print(results)
-    # plot_accs_zhexian(mis_ood, algs, 'MixClassified OOD Data', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)    
+        mis_ood.append(result[0])
+        cls_id.append(result[1])
+        i+=1
+        # mis_ood.append(list(result))
+        # cls_id.append(list(result))
+    path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'mis_du_ood.jpg') 
+    plot_zhexian_with_bg(mis_ood, legends, 
+                         'MixClassified OOD Data', 
+                         np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),
+                         group_split=cfg.DATASET.GROUP_SPLITS,
+                         save_path=path)    
     # path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'cls_du_id.jpg')
     # plot_accs_zhexian(cls_id, algs, 'Unlabeled ID Data', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)
-    print(cls_id)
-    path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'cls_test.jpg')
-    plot_accs_zhexian(cls_id, algs, 'Test Data ACC', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)
+    # print(cls_id)
+    # path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'cls_test.jpg')
+    # plot_accs_zhexian(cls_id, algs, 'Test Data ACC', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)
     # print(mis_ood)
     # path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'cls_test.jpg')
     # plot_accs_zhexian(mis_ood, algs, 'Test Data ACC', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)
@@ -331,12 +340,13 @@ def analyse5(cfg):
 
 # 6. 是否有OOD样本的混淆矩阵
 def analyse6(cfg):
-    algs=['FixMatch','MixMatch','OpenMatch','CCSSL','DCSSL']
+    algs=['FixMatch'] #,'MixMatch','OpenMatch','CCSSL','DCSSL']
     mean_diffs,var_diffs=[],[]
-    titles=['(a) FixMatch','(b) MixMatch','(c) OpenMatch','(d) CCSSL','(e) DCSSL']
+    titles=['FixMatch' ]#,'(b) MixMatch','(c) OpenMatch','(d) CCSSL','(e) DCSSL']
     i=0
     for alg in algs:
         fusions=[]
+        
         # clean
         cfg.defrost()
         cfg.ALGORITHM.NAME=alg
@@ -356,7 +366,7 @@ def analyse6(cfg):
         # === OOD
         cfg.defrost()
         cfg.ALGORITHM.NAME=alg
-        cfg.DATASET.DU.OOD.INCLUDE_ALL=True
+        cfg.DATASET.DU.OOD.RATIO=0.75
         cfg.freeze()    
         root_path=get_root_path(cfg)   
         pic_save_path= os.path.join(root_path, "a_pic")
@@ -370,9 +380,28 @@ def analyse6(cfg):
         test_fusion_matrix.update(pred3, gt3)
         fusions.append(test_fusion_matrix.matrix)
         
+        # # balanced
+        # cfg.defrost()
+        # cfg.ALGORITHM.NAME=alg
+        # cfg.DATASET.DL.NUM_LABELED_HEAD=372
+        # cfg.DATASET.DL.IMB_FACTOR_L=1
+        # cfg.DATASET.DU.ID.NUM_UNLABELED_HEAD=744
+        # cfg.DATASET.DU.ID.IMB_FACTOR_UL=1 
+        # cfg.DATASET.DU.OOD.INCLUDE_ALL=False
+        # cfg.freeze()    
+        # root_path=get_root_path(cfg)    
+        # model_path=os.path.join(root_path,'models','best_model.pth')
+        # trainer=build_trainer(cfg)
+        # trainer.load_checkpoint(model_path)  
+        # test_fusion_matrix=FusionMatrix(cfg.DATASET.NUM_CLASSES) 
+        # gt3,pred3,_ = trainer.get_test_data_pred_gt_feat()        
+        # test_fusion_matrix.update(pred3, gt3)
+        # fusions.insert(0,test_fusion_matrix.matrix)
+        
         save_path=os.path.join(pic_save_path,'fusion_matrix.jpg')
-        plot_pd_heatmaps(fusions,save_path=save_path,r=1,c=2,title=titles[i],subtitles=['Clean','w. OOD'])
+        plot_pd_heatmaps(fusions,save_path=save_path,r=1,c=2,title='',subtitles=['(a) Imbal.(IF-100)','(b) Imbal.(IF-100 w. OOD)'])
         i+=1
+        
 # 7. cosine 热力图case
 def analyse7(cfg):
     cfg.defrost()
@@ -388,12 +417,55 @@ def analyse7(cfg):
     cos_sim = trainer.get_case_cosine()  
     plot_pd_heatmap(cos_sim,save_path=os.path.join(root_path,'cosine_sim.jpg'))
 
-# 8. positive mask / negative mask
+# 8. test data 置信度与距离类中心的欧式距离
 def analyse8(cfg):
-    labels=np.array([1,2,3,4,1,2,3,4])
-    conf=[]
     
-    
+    algs=['FixMatch','MixMatch','OpenMatch','DCSSL']
+    confidence,distance=[],[] 
+    i=0
+    titles=['(a) FixMatch','(b) MixMatch','(c) OpenMatch','(d) DeCAB (Ours)']
+    for alg in algs: 
+        cfg.defrost()
+        cfg.ALGORITHM.NAME=alg
+        cfg.freeze()    
+        root_path=get_root_path(cfg)   
+        pic_save_path= os.path.join(root_path, "a_pic")
+        if not os.path.exists(pic_save_path):
+            os.mkdir(pic_save_path)
+        model_path=os.path.join(root_path,'models','best_model.pth')
+        trainer=build_trainer(cfg)
+        trainer.load_checkpoint(model_path)  
+        # test_fusion_matrix=FusionMatrix(cfg.DATASET.NUM_CLASSES) 
+        gt,pred,feat,conf = trainer.get_test_data_pred_gt_feat(return_confidence=True)     
+        prototypes=torch.zeros(cfg.DATASET.NUM_CLASSES,feat.shape[-1]) 
+        
+        # tmp_gt=gt
+        # tmp_feat=feat
+        # correct_conf=conf
+        correct_index=torch.nonzero(gt==pred,as_tuple=False).squeeze()  
+        tmp_gt=gt[correct_index]
+        tmp_feat=feat[correct_index]
+        correct_conf=conf[correct_index]
+        tmp_conf=[]
+        tmp_dis=[]
+        for c in [7,8,9]:  #range(cfg.DATASET.NUM_CLASSES)
+            select_index= torch.nonzero(tmp_gt == c, as_tuple=False).squeeze(1)
+            prototypes[c] = tmp_feat[select_index].mean(dim=0) 
+            c_conf=correct_conf[select_index]
+            c_dist=1-F.cosine_similarity(tmp_feat[select_index], prototypes[c].unsqueeze(0),dim=1)
+            # c_dist=F.pairwise_distance(tmp_feat[select_index], prototypes[c], p=2)
+            tmp_conf.append(c_conf)
+            tmp_dis.append(c_dist)
+        tmp_conf=torch.cat(tmp_conf,dim=0)
+        tmp_dis=torch.cat(tmp_dis,dim=0)
+         
+        # proto=prototypes[tmp_gt]
+        # dist=F.pairwise_distance(tmp_feat, proto, p=2)
+        distance.append(copy.deepcopy(tmp_dis.numpy()))
+        confidence.append(copy.deepcopy(tmp_conf.squeeze().numpy()))
+    save_path=os.path.join(pic_save_path,'conf_dist.jpg')
+    plot_dots(x=confidence,y=distance,titles=titles,save_path=save_path,mode='c')
+        
 def analyse(cfg,analyse_type):
     
     if analyse_type==1:    
@@ -410,6 +482,8 @@ def analyse(cfg,analyse_type):
         analyse6(cfg)
     elif analyse_type==7:
         analyse7(cfg)
+    elif analyse_type==8:
+        analyse8(cfg)
     else:
         print("Invalid analyse type!")
         

@@ -63,7 +63,7 @@ class DCSSLTrainer(BaseTrainer):
         self.sample_weight_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SS or not self.ablation_enable
         self.sample_pair_weight_hp_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SPS_HP or not self.ablation_enable
         self.sample_pair_weight_hn_enable= self.ablation_enable and cfg.ALGORITHM.ABLATION.DCSSL.SPS_HN or not self.ablation_enable
-        
+        self.contrasitive_loss_enable=cfg.ALGORITHM.DCSSL.CONTRASTIVE_LOSS_ENABLE
         if cfg.RESUME!='':
             self.load_checkpoint(cfg.RESUME)
         if cfg.ALGORITHM.DCSSL.ID_MASK_PATH!='':
@@ -75,7 +75,60 @@ class DCSSLTrainer(BaseTrainer):
         self.losses_x = AverageMeter()
         self.losses_u = AverageMeter() 
         self.losses_d_ctr=AverageMeter()
-        
+    def train(self,):
+        fusion_matrix = FusionMatrix(self.num_classes)
+        acc = AverageMeter()      
+        self.loss_init()
+        start_time = time.time()   
+        for self.iter in range(self.start_iter, self.max_iter):
+            self.pretraining= self.warmup_enable and self.iter<=self.warmup_iter 
+            return_data=self.train_step(self.pretraining)
+            if return_data is not None:
+                pred,gt=return_data[0],return_data[1]
+                fusion_matrix.update(pred, gt) 
+            if self.iter%self.train_per_step==0:  
+                end_time = time.time()           
+                time_second=(end_time - start_time)
+                eta_seconds = time_second * (self.max_epoch - self.epoch)
+                eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
+                    
+                group_acc=fusion_matrix.get_group_acc(self.cfg.DATASET.GROUP_SPLITS)
+                self.train_group_accs.append(group_acc)
+                results=self.evaluate()
+                
+                if self.best_val<results[0]:
+                    self.best_val=results[0]
+                    self.best_val_test=results[1]
+                    self.best_val_iter=self.iter
+                    self.save_checkpoint(file_name="best_model.pth")
+                if self.epoch%self.save_epoch==0:
+                    if self.epoch%100==0:
+                        self.save_checkpoint(file_name="checkpoint_{}.pth".format(self.epoch))
+                    else:
+                        self.save_checkpoint()
+                self.train_losses.append(self.losses.avg)
+                self.logger.info("== Pretraining is enable:{}".format(self.pretraining))
+                self.logger.info('== Train_loss:{:>5.4f}  train_loss_x:{:>5.4f}   train_loss_u:{:>5.4f} '.\
+                    format(self.losses.avg, self.losses_x.avg, self.losses_u.avg))
+                self.logger.info('== val_losss:{:>5.4f}   test_loss:{:>5.4f}   epoch_Time:{:>5.2f}min eta:{}'.\
+                        format(self.val_losses[-1], self.test_losses[-1],time_second / 60,eta_string))
+                self.logger.info('== Train  group_acc: many:{:>5.2f}  medium:{:>5.2f}  few:{:>5.2f}'.format(self.train_group_accs[-1][0]*100,self.train_group_accs[-1][1]*100,self.train_group_accs[-1][2]*100))
+                self.logger.info('==  Val   group_acc: many:{:>5.2f}  medium:{:>5.2f}  few:{:>5.2f}'.format(self.val_group_accs[-1][0]*100,self.val_group_accs[-1][1]*100,self.val_group_accs[-1][2]*100))
+                self.logger.info('==  Test  group_acc: many:{:>5.2f}  medium:{:>5.2f}  few:{:>5.2f}'.format(self.test_group_accs[-1][0]*100,self.test_group_accs[-1][1]*100,self.test_group_accs[-1][2]*100))
+                self.logger.info('== Val_acc:{:>5.2f}  Test_acc:{:>5.2f}'.format(results[0]*100,results[1]*100))
+                self.logger.info('== Best Results: Epoch:{} Val_acc:{:>5.2f}  Test_acc:{:>5.2f}'.format(self.best_val_iter//self.train_per_step,self.best_val*100,self.best_val_test*100))
+              
+                # reset 
+                fusion_matrix = FusionMatrix(self.num_classes)
+                acc = AverageMeter()                 
+                self.loss_init()             
+                start_time = time.time()   
+                self.operate_after_epoch()
+                self.epoch+=1   
+                
+        self.plot()       
+        return
+    
     def train_step(self,pretraining=False): 
          
         self.model.train()
@@ -149,178 +202,231 @@ class DCSSLTrainer(BaseTrainer):
         loss_cons = self.ul_criterion(
             logits_u_s, pred_class, weight=loss_weight, avg_factor=logits_u_s.size(0)
         )
-        
-        # 3. ctr loss 
         labels = pred_class 
-        contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
-        features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
-        conf_sample=loss_weight
-        # labels = torch.cat([targets_x,pred_class],dim=0) 
-        # conf_sample= torch.cat([torch.ones_like(targets_x).cuda(),loss_weight.clone().detach()],dim=0)
-        # features =torch.cat([torch.cat([f_l_s1.unsqueeze(1), f_l_s2.unsqueeze(1)], dim=1),torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)],dim=0) 
-        # max_probs=torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0)
-        # 对于低置信度样本赋予了高权重
-        if self.sample_weight_enable:
-            sample_weight=conf_sample*(1-max_probs)                        
-        else:
-            sample_weight=conf_sample
-        # 0. 实例对比学习
-        if self.loss_version==0:
-            loss_d_ctr = self.loss_contrast(features)   
-            
-        # 1. 高置信度正样本+pi*pj ccssl x
-        elif self.loss_version==1:
-           
-            loss_d_ctr = self.loss_contrast(features, # projected_feature
-                                            max_probs=max_probs, # confidence
-                                            labels=labels, # pred_class
-                                            reduction=None) #torch.Size([2, 128])
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        
-        # 2. 选择高置信度的样本对作为正对 + pi*pj x
-        elif self.loss_version==2:
-           
-            with torch.no_grad():
-                select_matrix = self.contrast_left_out_p(max_probs)
-            loss_d_ctr = self.loss_contrast(features,
-                                            max_probs=max_probs,
-                                            labels=labels,
-                                            reduction=None,
-                                            select_matrix=select_matrix)
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 3. pos weight + neg weight x
-        elif self.loss_version==3:
-           
-            with torch.no_grad():
-                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
-                pos_mask = torch.from_numpy(cos_sim).cuda()
-                mask= torch.eq(labels, labels.T).float().cuda()
-                mask=pos_mask*mask+(1-pos_mask)*(1-mask)
-            loss_d_ctr = self.loss_contrast(features, 
-                                            labels=labels,
-                                            mask=mask,
-                                            reduction=None)
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 4.  pos weight + neg weight + pi*pj x
-        elif self.loss_version==4:
-           
-            with torch.no_grad():
-                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
-                pos_mask = torch.from_numpy(cos_sim).cuda()
-                mask= torch.eq(labels, labels.T).float().cuda()
-                mask=(1+pos_mask)*mask+(2-pos_mask)*(1-mask)
-            loss_d_ctr = self.loss_contrast(features,
-                                            max_probs=max_probs,  
-                                            labels=labels,
-                                            mask=mask,
-                                            reduction=None)
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 5. 直接使用高维特征计算相似度，不用pi*pj
-        elif self.loss_version==5:
-            with torch.no_grad(): 
-                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
-                pos_mask = torch.from_numpy(cos_sim).cuda()
-                mask= torch.eq(labels, labels.T).float().cuda()
-                mask=(1+pos_mask)*mask+(2-pos_mask)*(1-mask)
-            loss_d_ctr = self.loss_contrast(features, 
-                                            labels=labels,
-                                            mask=mask,
-                                            reduction=None)            
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 6. 直接使用高维特征计算相似度 +  使用所有样本加权qi
-        elif self.loss_version==6:
-            contrast_mask=max_probs
-            with torch.no_grad(): 
-                cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
-                mask = torch.from_numpy(cos_sim).cuda()
-            loss_d_ctr = self.loss_contrast(features, 
-                                            labels=labels,
-                                            mask=mask,
-                                            reduction=None)
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 7. 直接使用低维特征计算相似度 +  使用所有样本加权qi
-        elif self.loss_version==7:
-            contrast_mask*=max_probs
-            with torch.no_grad(): 
-                cos_sim= 1 - cosine_similarity(f_u_s1.detach().cpu().numpy())
-                mask = torch.from_numpy(cos_sim).cuda()
-            loss_d_ctr = self.loss_contrast(features, 
-                                            labels=labels,
-                                            mask=mask,
-                                            reduction=None)
-            loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-        
-        # 8. 单纯的有监督对比
-        elif self.loss_version==8: 
-            # loss_d_ctr = self.loss_contrast(features, 
-            #                                 labels=labels, 
-            #                                 reduction=None)
-            # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
-            if self.epoch>self.warmup_epoch:
-                loss_d_ctr = (conf_sample* self.get_prototype_contrast_loss(features, self.means.detach(),labels)).mean()
+        # 3. ctr loss 
+        if self.contrasitive_loss_enable:
+            contrast_mask = max_probs.ge(self.contrast_with_thresh).float()
+            features = torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)  
+            conf_sample=loss_weight
+            # labels = torch.cat([targets_x,pred_class],dim=0) 
+            # conf_sample= torch.cat([torch.ones_like(targets_x).cuda(),loss_weight.clone().detach()],dim=0)
+            # features =torch.cat([torch.cat([f_l_s1.unsqueeze(1), f_l_s2.unsqueeze(1)], dim=1),torch.cat([f_u_s1.unsqueeze(1), f_u_s2.unsqueeze(1)], dim=1)],dim=0) 
+            # max_probs=torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0)
+            # 对于低置信度样本赋予了高权重
+            if self.sample_weight_enable:
+                sample_weight=conf_sample*(1-max_probs)                        
             else:
-                loss_d_ctr=torch.tensor(0.).cuda()
-        
-        # 9.  cos_sim
-        # 10. id: 1-max_probs ood: cos_sim
-        # 11. 2-max_probs
-        # 12. sample_weight: loss_weight*(1-max_probs)
-        # elif 13>=self.loss_version>=9:
-        #     # contrast_mask=max_probs.ge(self.contrast_with_thresh).float()
-        #     if self.epoch>self.warmup_epoch:
-        #         # v9: score
-        #         # v10: 2-score
-        #         if self.loss_version==9:
-        #             sample_weight=self.get_sim_with_prototypes(f_u_s1, pred_class)
-        #             id_mask=torch.eye(sample_weight).cuda()
-        #         elif self.loss_version==10:
-        #             with torch.no_grad():
-        #                 sample_weight= 1-self.get_sim_with_prototypes(f_u_s1.detach(), pred_class)
-        #             #     id_mask= self.id_masks[u_index]
-        #             #     ood_mask=1-id_mask
-        #             #     sample_weight= id_mask*(2-max_probs)+ood_mask*sample_weight
-        #             # sample_weight=2-max_probs
-        #         elif self.loss_version==11:
-        #             sample_weight=2-max_probs
-        #             id_mask=torch.ones_like(sample_weight).cuda()
-        elif self.loss_version==12:
-            if self.epoch>self.warmup_epoch: 
-                with torch.no_grad():  
-                    f=encoding[batch_size:batch_size+inputs_u_w.size(0)].detach()
-                    cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
-                    cos_sim = torch.from_numpy(cos_sim).cuda()                    
-                    y = labels.contiguous().view(-1, 1)
-                    labeled_mask= torch.eq(y, y.T).float() 
-                    if self.sample_pair_weight_hp_enable and self.sample_pair_weight_hn_enable:
-                        # 强调高置信度的正样本对的硬正分数
-                        mask=(1-cos_sim)*labeled_mask + cos_sim*(1-labeled_mask)
-                    elif self.sample_pair_weight_hn_enable: # 在有监督基础上加上负样本
-                        mask = cos_sim*(1-labeled_mask)+labeled_mask
-                    elif self.sample_pair_weight_hp_enable:
-                        mask = (1-cos_sim)*labeled_mask
-                    else: 
-                        mask=labeled_mask  
-                loss_d_ctr = self.loss_contrast(features,  
-                                                mask=mask,                                                  
+                sample_weight=conf_sample
+            # 0. 实例对比学习
+            if self.loss_version==0:
+                loss_d_ctr = self.loss_contrast(features)   
+                
+            # 1. 高置信度正样本+pi*pj ccssl x
+            elif self.loss_version==1:
+            
+                loss_d_ctr = self.loss_contrast(features, # projected_feature
+                                                max_probs=max_probs, # confidence
+                                                labels=labels, # pred_class
+                                                reduction=None) #torch.Size([2, 128])
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            
+            # 2. 选择高置信度的样本对作为正对 + pi*pj x
+            elif self.loss_version==2:
+            
+                with torch.no_grad():
+                    select_matrix = self.contrast_left_out_p(max_probs)
+                loss_d_ctr = self.loss_contrast(features,
+                                                max_probs=max_probs,
+                                                labels=labels,
+                                                reduction=None,
+                                                select_matrix=select_matrix)
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 3. pos weight + neg weight x
+            elif self.loss_version==3:
+            
+                with torch.no_grad():
+                    cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                    pos_mask = torch.from_numpy(cos_sim).cuda()
+                    mask= torch.eq(labels, labels.T).float().cuda()
+                    mask=pos_mask*mask+(1-pos_mask)*(1-mask)
+                loss_d_ctr = self.loss_contrast(features, 
+                                                labels=labels,
+                                                mask=mask,
                                                 reduction=None)
-                loss_d_ctr = (loss_d_ctr * sample_weight).mean()  
-            else:loss_d_ctr=torch.tensor(0.).cuda() 
-        
-        elif self.loss_version==13: 
-            # 对高置信度的样本使用硬负硬正+1，其他就用1    
-            if self.epoch>self.warmup_epoch:
-                sample_weight=1-max_probs
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 4.  pos weight + neg weight + pi*pj x
+            elif self.loss_version==4:
+            
+                with torch.no_grad():
+                    cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                    pos_mask = torch.from_numpy(cos_sim).cuda()
+                    mask= torch.eq(labels, labels.T).float().cuda()
+                    mask=(1+pos_mask)*mask+(2-pos_mask)*(1-mask)
+                loss_d_ctr = self.loss_contrast(features,
+                                                max_probs=max_probs,  
+                                                labels=labels,
+                                                mask=mask,
+                                                reduction=None)
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 5. 直接使用高维特征计算相似度，不用pi*pj
+            elif self.loss_version==5:
                 with torch.no_grad(): 
-                    # f=torch.cat([f_l_w,f_u_w],dim=0)
+                    cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                    pos_mask = torch.from_numpy(cos_sim).cuda()
+                    mask= torch.eq(labels, labels.T).float().cuda()
+                    mask=(1+pos_mask)*mask+(2-pos_mask)*(1-mask)
+                loss_d_ctr = self.loss_contrast(features, 
+                                                labels=labels,
+                                                mask=mask,
+                                                reduction=None)            
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 6. 直接使用高维特征计算相似度 +  使用所有样本加权qi
+            elif self.loss_version==6:
+                contrast_mask=max_probs
+                with torch.no_grad(): 
+                    cos_sim= 1 - cosine_similarity(encoding[inputs_x.size(0):inputs_x.size(0)+inputs_u_w.size(0)].detach().cpu().numpy())
+                    mask = torch.from_numpy(cos_sim).cuda()
+                loss_d_ctr = self.loss_contrast(features, 
+                                                labels=labels,
+                                                mask=mask,
+                                                reduction=None)
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 7. 直接使用低维特征计算相似度 +  使用所有样本加权qi
+            elif self.loss_version==7:
+                contrast_mask*=max_probs
+                with torch.no_grad(): 
+                    cos_sim= 1 - cosine_similarity(f_u_s1.detach().cpu().numpy())
+                    mask = torch.from_numpy(cos_sim).cuda()
+                loss_d_ctr = self.loss_contrast(features, 
+                                                labels=labels,
+                                                mask=mask,
+                                                reduction=None)
+                loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+            
+            # 8. 单纯的有监督对比
+            elif self.loss_version==8: 
+                # loss_d_ctr = self.loss_contrast(features, 
+                #                                 labels=labels, 
+                #                                 reduction=None)
+                # loss_d_ctr = (loss_d_ctr * contrast_mask).mean()
+                if self.epoch>self.warmup_epoch:
+                    loss_d_ctr = (conf_sample* self.get_prototype_contrast_loss(features, self.means.detach(),labels)).mean()
+                else:
+                    loss_d_ctr=torch.tensor(0.).cuda()
+            
+            # 9.  cos_sim
+            # 10. id: 1-max_probs ood: cos_sim
+            # 11. 2-max_probs
+            # 12. sample_weight: loss_weight*(1-max_probs)
+            # elif 13>=self.loss_version>=9:
+            #     # contrast_mask=max_probs.ge(self.contrast_with_thresh).float()
+            #     if self.epoch>self.warmup_epoch:
+            #         # v9: score
+            #         # v10: 2-score
+            #         if self.loss_version==9:
+            #             sample_weight=self.get_sim_with_prototypes(f_u_s1, pred_class)
+            #             id_mask=torch.eye(sample_weight).cuda()
+            #         elif self.loss_version==10:
+            #             with torch.no_grad():
+            #                 sample_weight= 1-self.get_sim_with_prototypes(f_u_s1.detach(), pred_class)
+            #             #     id_mask= self.id_masks[u_index]
+            #             #     ood_mask=1-id_mask
+            #             #     sample_weight= id_mask*(2-max_probs)+ood_mask*sample_weight
+            #             # sample_weight=2-max_probs
+            #         elif self.loss_version==11:
+            #             sample_weight=2-max_probs
+            #             id_mask=torch.ones_like(sample_weight).cuda()
+            elif self.loss_version==12:
+                if self.epoch>self.warmup_epoch: 
+                    with torch.no_grad():  
+                        f=encoding[batch_size:batch_size+inputs_u_w.size(0)].detach()
+                        cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
+                        cos_sim = torch.from_numpy(cos_sim).cuda()                    
+                        y = labels.contiguous().view(-1, 1)
+                        labeled_mask= torch.eq(y, y.T).float() 
+                        if self.sample_pair_weight_hp_enable and self.sample_pair_weight_hn_enable:
+                            # 强调高置信度的正样本对的硬正分数
+                            mask=(1-cos_sim)*labeled_mask + cos_sim*(1-labeled_mask)
+                        elif self.sample_pair_weight_hn_enable: # 在有监督基础上加上负样本
+                            mask = cos_sim*(1-labeled_mask)+labeled_mask
+                        elif self.sample_pair_weight_hp_enable:
+                            mask = (1-cos_sim)*labeled_mask
+                        else: 
+                            mask=labeled_mask  
+                        # mask[mask<0.3]=0
+                    loss_d_ctr = self.loss_contrast(features,  
+                                                    mask=mask,                                                  
+                                                    reduction=None)
+                    loss_d_ctr = (loss_d_ctr * sample_weight).mean()  
+                else:loss_d_ctr=torch.tensor(0.).cuda() 
+            
+            elif self.loss_version==13: 
+                # 对高置信度的样本使用硬负硬正+1，其他就用1    
+                if self.epoch>self.warmup_epoch:
+                    sample_weight=1-max_probs
+                    with torch.no_grad(): 
+                        # f=torch.cat([f_l_w,f_u_w],dim=0)
+                        # f=f_u_w
+                        f=encoding[batch_size:batch_size+inputs_u_w.size(0)].detach()
+                        cos_sim= cosine_similarity(f.cpu().numpy()) 
+                        cos_sim = torch.from_numpy(cos_sim).cuda()
+                        
+                        conf_sample=conf_sample.contiguous().view(-1, 1)
+                        conf_mask= torch.eq(conf_sample, conf_sample.T).float() 
+                        
+                        y = labels.contiguous().view(-1, 1)
+                        labeled_mask= torch.eq(y, y.T).float() 
+                        
+                        pos_mask = labeled_mask
+                        neg_mask = 1-labeled_mask  
+                        if self.sample_pair_weight_hp_enable:
+                            # 强调高置信度的正样本对的硬正分数 假阳？
+                            pos_mask=(2-cos_sim)*labeled_mask*conf_mask 
+                        if self.sample_pair_weight_hn_enable:
+                            # 强调高置信度的负样本对的硬负分数
+                            probs=probs_u_w
+                            neg_mask=self.conduct_negative_pair(probs, labels) 
+                            neg_mask=(conf_mask*(1-labeled_mask)+(1-conf_mask)*neg_mask)*(1+cos_sim)               
+                                        
+                    loss_d_ctr = self.loss_contrast(features,  
+                                                    pos_mask=pos_mask,
+                                                    neg_mask=neg_mask, 
+                                                    labels=labels,                                                   
+                                                    reduction=None)            
+                    loss_d_ctr = (loss_d_ctr * sample_weight).mean()  
+                else:
+                    loss_d_ctr=torch.tensor(0.).cuda()
+                
+                    
+                    # pos_mask = labeled_mask
+                    # neg_mask = 1-labeled_mask  
+                    # if self.sample_pair_weight_hp_enable:
+                    #     # 强调高置信度的正样本对的硬正分数
+                    #     pos_mask=(1-cos_sim)*labeled_mask*conf_mask+labeled_mask
+                    #     # pos_mask=(1-cos_sim)*labeled_mask+labeled_mask
+                    # if self.sample_pair_weight_hn_enable:
+                    #     # 强调高置信度的负样本对的硬负分数
+                    #     # bin_labels=F.one_hot(targets_x, num_classes=self.num_classes).float().cuda()
+                    #     # probs=torch.cat([bin_labels,probs_u_w],dim=0) 
+                    #     # probs=probs_u_w
+                    #     # neg_mask=self.conduct_negative_pair(probs, labels)
+                    #     # neg_mask=cos_sim*(1-labeled_mask)*neg_mask+(1-labeled_mask)
+                    #     # neg_mask=cos_sim*(1-labeled_mask)+(1-labeled_mask)
+                    #     # neg_mask=cos_sim*(1-labeled_mask)*conf_mask+(1-labeled_mask)
+                    # # 低置信度样本 ： 类对比损失没有任何改变 对比负类的 
+                    # # 找出对那些类是负的 
+            elif self.loss_version==14: # 对高置信度的样本使用硬负硬正+1，其他就用1 用硬正加权和取平均
+                    
+                with torch.no_grad(): 
                     # f=f_u_w
                     f=encoding[batch_size:batch_size+inputs_u_w.size(0)].detach()
-                    cos_sim= cosine_similarity(f.cpu().numpy()) 
+                    cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
                     cos_sim = torch.from_numpy(cos_sim).cuda()
                     
                     conf_sample=conf_sample.contiguous().view(-1, 1)
@@ -332,120 +438,69 @@ class DCSSLTrainer(BaseTrainer):
                     pos_mask = labeled_mask
                     neg_mask = 1-labeled_mask  
                     if self.sample_pair_weight_hp_enable:
-                        # 强调高置信度的正样本对的硬正分数 假阳？
-                        pos_mask=(2-cos_sim)*labeled_mask*conf_mask 
+                        # 强调高置信度的正样本对的硬正分数
+                        pos_mask=(1-cos_sim)*labeled_mask*conf_mask+labeled_mask
                     if self.sample_pair_weight_hn_enable:
                         # 强调高置信度的负样本对的硬负分数
                         probs=probs_u_w
-                        neg_mask=self.conduct_negative_pair(probs, labels) 
-                        neg_mask=(conf_mask*(1-labeled_mask)+(1-conf_mask)*neg_mask)*(1+cos_sim)               
-                                    
+                        neg_mask=self.conduct_negative_pair(probs, labels)
+                        neg_mask=cos_sim*(1-labeled_mask)*neg_mask+(1-labeled_mask)
+                    # 低置信度样本 ： 类对比损失没有任何改变 对比负类的 
                 loss_d_ctr = self.loss_contrast(features,  
                                                 pos_mask=pos_mask,
                                                 neg_mask=neg_mask, 
                                                 labels=labels,                                                   
-                                                reduction=None)            
-                loss_d_ctr = (loss_d_ctr * sample_weight).mean()  
-            else:
-                loss_d_ctr=torch.tensor(0.).cuda()
+                                                reduction=None)
+                loss_d_ctr = (loss_d_ctr * sample_weight).mean() 
+                
+            # elif self.loss_version==14: #高置信度拉向类中心。低置信度根据cosine相似度拉
+            #     if self.epoch>self.warmup_epoch:
+            #         select_idx1 = torch.nonzero(conf_sample>0, as_tuple=False).squeeze(1)
+            #         select_idx2 = torch.nonzero(conf_sample<=0, as_tuple=False).squeeze(1)
+            #         loss_p=self.get_prototype_contrast_loss(features[:][select_idx1][:], self.means.detach(),labels[select_idx1])
             
-                
-                # pos_mask = labeled_mask
-                # neg_mask = 1-labeled_mask  
-                # if self.sample_pair_weight_hp_enable:
-                #     # 强调高置信度的正样本对的硬正分数
-                #     pos_mask=(1-cos_sim)*labeled_mask*conf_mask+labeled_mask
-                #     # pos_mask=(1-cos_sim)*labeled_mask+labeled_mask
-                # if self.sample_pair_weight_hn_enable:
-                #     # 强调高置信度的负样本对的硬负分数
-                #     # bin_labels=F.one_hot(targets_x, num_classes=self.num_classes).float().cuda()
-                #     # probs=torch.cat([bin_labels,probs_u_w],dim=0) 
-                #     # probs=probs_u_w
-                #     # neg_mask=self.conduct_negative_pair(probs, labels)
-                #     # neg_mask=cos_sim*(1-labeled_mask)*neg_mask+(1-labeled_mask)
-                #     # neg_mask=cos_sim*(1-labeled_mask)+(1-labeled_mask)
-                #     # neg_mask=cos_sim*(1-labeled_mask)*conf_mask+(1-labeled_mask)
-                # # 低置信度样本 ： 类对比损失没有任何改变 对比负类的 
-                # # 找出对那些类是负的 
-        elif self.loss_version==14: # 对高置信度的样本使用硬负硬正+1，其他就用1 用硬正加权和取平均
-                
-            with torch.no_grad(): 
-                # f=f_u_w
-                f=encoding[batch_size:batch_size+inputs_u_w.size(0)].detach()
-                cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
-                cos_sim = torch.from_numpy(cos_sim).cuda()
-                
-                conf_sample=conf_sample.contiguous().view(-1, 1)
-                conf_mask= torch.eq(conf_sample, conf_sample.T).float() 
-                
-                y = labels.contiguous().view(-1, 1)
-                labeled_mask= torch.eq(y, y.T).float() 
-                
-                pos_mask = labeled_mask
-                neg_mask = 1-labeled_mask  
-                if self.sample_pair_weight_hp_enable:
-                    # 强调高置信度的正样本对的硬正分数
-                    pos_mask=(1-cos_sim)*labeled_mask*conf_mask+labeled_mask
-                if self.sample_pair_weight_hn_enable:
-                    # 强调高置信度的负样本对的硬负分数
-                    probs=probs_u_w
-                    neg_mask=self.conduct_negative_pair(probs, labels)
-                    neg_mask=cos_sim*(1-labeled_mask)*neg_mask+(1-labeled_mask)
-                # 低置信度样本 ： 类对比损失没有任何改变 对比负类的 
-            loss_d_ctr = self.loss_contrast(features,  
-                                            pos_mask=pos_mask,
-                                            neg_mask=neg_mask, 
-                                            labels=labels,                                                   
-                                            reduction=None)
-            loss_d_ctr = (loss_d_ctr * sample_weight).mean() 
+            #         # if self.sample_weight_enable:
+            #         sample_weight=conf_sample*(1-torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0))
+            #         # else:
+            #         #     sample_weight=conf_sample
+                    
+            #         with torch.no_grad(): 
+            #             f=torch.cat([f_l_w,f_u_w],dim=0)
+            #             cos_sim= cosine_similarity(f.detach().cpu().numpy())                        
+            #             cos_sim = torch.from_numpy(cos_sim).cuda()
+                                        
+            #         loss_c=(sample_weight*self.get_local_contrast_loss(features,labels,mask=cos_sim)).mean()
+            #     else:
+            #         loss_p=torch.tensor(0.).cuda()
+            #         loss_c=torch.tensor(0.).cuda()
+            #     loss_d_ctr = loss_p + 0.2*loss_c
             
-        # elif self.loss_version==14: #高置信度拉向类中心。低置信度根据cosine相似度拉
-        #     if self.epoch>self.warmup_epoch:
-        #         select_idx1 = torch.nonzero(conf_sample>0, as_tuple=False).squeeze(1)
-        #         select_idx2 = torch.nonzero(conf_sample<=0, as_tuple=False).squeeze(1)
-        #         loss_p=self.get_prototype_contrast_loss(features[:][select_idx1][:], self.means.detach(),labels[select_idx1])
-        
-        #         # if self.sample_weight_enable:
-        #         sample_weight=conf_sample*(1-torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0))
-        #         # else:
-        #         #     sample_weight=conf_sample
-                
-        #         with torch.no_grad(): 
-        #             f=torch.cat([f_l_w,f_u_w],dim=0)
-        #             cos_sim= cosine_similarity(f.detach().cpu().numpy())                        
-        #             cos_sim = torch.from_numpy(cos_sim).cuda()
-                                    
-        #         loss_c=(sample_weight*self.get_local_contrast_loss(features,labels,mask=cos_sim)).mean()
-        #     else:
-        #         loss_p=torch.tensor(0.).cuda()
-        #         loss_c=torch.tensor(0.).cuda()
-        #     loss_d_ctr = loss_p + 0.2*loss_c
-        
-        # elif self.loss_version==15:
-        #     # if self.sample_weight_enable:
-        #     #     max_probs=torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0)
-        #     #     sample_weight=conf_sample*(1.2-max_probs) 
-        #     # else:
-        #     #    sample_weight=conf_sample
-        #     with torch.no_grad(): 
-        #         f=torch.cat([f_l_w,f_u_w],dim=0)
-        #         cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
-        #         cos_sim = torch.from_numpy(cos_sim).cuda()
-                
-        #         conf_sample=conf_sample.contiguous().view(-1, 1)
-        #         conf_mask= torch.eq(conf_sample, conf_sample.T).float() 
-                
-        #         y = labels.contiguous().view(-1, 1)
-        #         labeled_mask= torch.eq(y, y.T).float()                
-                
-        #         pos_mask=(2-cos_sim)*labeled_mask+ cos_sim*(1-labeled_mask) 
-        #         neg_mask = torch.zeros_like(pos_mask).cuda()
-        #     loss_d_ctr = self.loss_contrast(features,  
-        #                                     pos_mask=pos_mask,
-        #                                     neg_mask=neg_mask, 
-        #                                     labels=labels,                                                   
-        #                                     reduction='mean')
-            
+            # elif self.loss_version==15:
+            #     # if self.sample_weight_enable:
+            #     #     max_probs=torch.cat([torch.ones_like(targets_x).cuda(),max_probs],dim=0)
+            #     #     sample_weight=conf_sample*(1.2-max_probs) 
+            #     # else:
+            #     #    sample_weight=conf_sample
+            #     with torch.no_grad(): 
+            #         f=torch.cat([f_l_w,f_u_w],dim=0)
+            #         cos_sim= cosine_similarity(f.detach().cpu().numpy()) 
+            #         cos_sim = torch.from_numpy(cos_sim).cuda()
+                    
+            #         conf_sample=conf_sample.contiguous().view(-1, 1)
+            #         conf_mask= torch.eq(conf_sample, conf_sample.T).float() 
+                    
+            #         y = labels.contiguous().view(-1, 1)
+            #         labeled_mask= torch.eq(y, y.T).float()                
+                    
+            #         pos_mask=(2-cos_sim)*labeled_mask+ cos_sim*(1-labeled_mask) 
+            #         neg_mask = torch.zeros_like(pos_mask).cuda()
+            #     loss_d_ctr = self.loss_contrast(features,  
+            #                                     pos_mask=pos_mask,
+            #                                     neg_mask=neg_mask, 
+            #                                     labels=labels,                                                   
+            #                                     reduction='mean')
+        else:
+            loss_d_ctr=loss_d_ctr=torch.tensor(0.).cuda() 
         loss=loss_cls+loss_cons+self.lambda_d*loss_d_ctr
         
         self.optimizer.zero_grad()

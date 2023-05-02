@@ -1,46 +1,45 @@
 
 
-OUTPUT_DIR: "outputs_ood/"
+OUTPUT_DIR: "outputs/"
 SEED : 7 
 SHOW_STEP: 100
 SAVE_EPOCH: 10
-MAX_EPOCH: 300
+MAX_EPOCH: 500
 TRAIN_STEP: 500 #  
 ALGORITHM:
-  NAME: "CReST" # FixMatchCReST
-  CONFIDENCE_THRESHOLD: 0.95  
+  NAME: "CReST" # FixMatchCReST 
   CREST:
-    GEN_PERIOD_EPOCH: 50 #  # 5gens x 100epoch = total 500 epochs
+    GEN_PERIOD_EPOCH: 100 #  # 5gens x 100epoch = total 500 epochs
     ALPHA : 3.0
     TMIN : 0.5
     PROGRESSIVE_ALIGN : False
-  PRE_TRAIN: 
-    ENABLE: True
-    WARMUP_EPOCH: 100
-    SimCLR: 
-      ENABLE: True
-      TEMPERATURE: 0.5  
-    OOD_DETECTOR:
-      TEMPERATURE: 0.5
-      MAGNITUDE: 0.0014 #  
-      THRESHOLD: 0.10004
-      DOMAIN_Y_UPDATE_ITER: 5
-      K: 10 # 'Top k most similar images used to predict the label'
-      OOD_THRESHOLD: 0.5
-      ID_THRESHOLD: 0.5
+  # PRE_TRAIN: 
+  #   ENABLE: True
+  #   WARMUP_EPOCH: 100
+  #   SimCLR: 
+  #     ENABLE: True
+  #     TEMPERATURE: 0.5  
+  #   OOD_DETECTOR:
+  #     TEMPERATURE: 0.5
+  #     MAGNITUDE: 0.0014 #  
+  #     THRESHOLD: 0.10004
+  #     DOMAIN_Y_UPDATE_ITER: 5
+  #     K: 10 # 'Top k most similar images used to predict the label'
+  #     OOD_THRESHOLD: 0.5
+  #     ID_THRESHOLD: 0.5
 
 MODEL:
-  NAME: "Resnet34" #"WRN_28_2" #
+  NAME: "WRN_28_8" # "Resnet34" #
   LOSS:
     LABELED_LOSS: "CrossEntropyLoss"   
     UNLABELED_LOSS: "CrossEntropyLoss"  
  
  # ===========================
-  OPTIMIZER:
-    TYPE: 'SGD'
-    BASE_LR: 0.03
-    MOMENTUM: 0.9
-    WEIGHT_DECAY: 2e-4 
+  # OPTIMIZER:
+  #   TYPE: 'SGD'
+  #   BASE_LR: 0.03
+  #   MOMENTUM: 0.9
+  #   WEIGHT_DECAY: 2e-4 
 
 DATASET:
   NAME: "cifar100"
@@ -48,8 +47,10 @@ DATASET:
   NUM_CLASSES: 100
   GROUP_SPLITS: [30,35,35]
   
-  UNLABELED_DATASET_RETURN_INDEX: True
-  IMB_TYPE: 'exp'
+  BATCH_SIZE: 16
+  IFS: [100]
+  OODRS: [0.0]  
+  UNLABELED_DATASET_RETURN_INDEX: True 
   DL:
     NUM_LABELED_HEAD: 150
     IMB_FACTOR_L: 100
@@ -61,9 +62,6 @@ DATASET:
     OOD:
       ENABLE: True
       DATASET: 'TIN'
-      RATIO: 0.0 # n(ood)/n(du) 
-    
-    UNLABELED_BATCH_RATIO: 2
-  
-  NUM_WORKERS : 8
+      RATIO: 0.0  
+      INCLUDE_ALL: True  
  

@@ -25,7 +25,7 @@ from dataset.build_dataloader import _build_loader
 class CReSTTrainer(FixMatchTrainer):    
     def __init__(self, cfg):
         super().__init__(cfg)         
-        self.gen_period_steps=cfg.ALGORITHM.CREST.GEN_PERIOD_EPOCH * self.val_iter
+        self.gen_period_steps=cfg.ALGORITHM.CREST.GEN_PERIOD_EPOCH * self.train_per_step
         self.t_min = cfg.ALGORITHM.CREST.TMIN
         self.with_progressive = cfg.ALGORITHM.CREST.PROGRESSIVE_ALIGN
 
@@ -118,7 +118,7 @@ class CReSTTrainer(FixMatchTrainer):
             current_lr = self.optimizer.param_groups[0]["lr"]
             ema_decay =self.ema_model.update(self.model, step=self.iter, current_lr=current_lr)
         if self.iter % self.cfg.SHOW_STEP==0:
-            self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} =='.format(self.epoch,self.iter%self.val_iter if self.iter%self.val_iter>0 else self.val_iter,self.val_iter,self.losses.val,self.losses_x.avg,self.losses_u.val))
+            self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} =='.format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses.val,self.losses_x.avg,self.losses_u.val))
         
         return now_result.cpu().numpy(), targets_x.cpu().numpy()
 

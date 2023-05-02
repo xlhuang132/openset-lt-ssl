@@ -30,47 +30,57 @@ def plot_pd_heatmap(results,save_path=''):
         plt.savefig(save_path, bbox_inches='tight')
     plt.close()
     
+def plot_dots(x=[],y=[],titles=[],save_path='',mode='e'):
+    n=len(x)
+    plt.figure(figsize=(8,8))
+    fig,ax=plt.subplots(2,2)
+    font_size=8
+    ax=ax.flatten() 
+    xticks=[0.2*i for i in range(1,6)]
+    if mode=='e':
+        yticks=range(0,13,2)
+    else:
+        # yticks=[0.6,0.7,0.8,0.9,1.0]
+        yticks=[0.1*i for i in range(6)]
+    for i in range(n):
+        plt.subplot(2,2,i+1)
+        ax[i].scatter(x[i], y[i],marker='o',s=1)
+        ax[i].set_title(titles[i])
+        ax[i].set_xlabel('Confidence') 
+        if mode=='e':
+            ax[i].set_ylabel('Euclidean Distance')
+        else:    
+            ax[i].set_ylabel('Cosine Distance')    
+        ax[i].set_xticks(xticks) 
+        ax[i].set_yticks(yticks)    
+        
+    fig.tight_layout()
+    if save_path!='': 
+        plt.savefig(save_path, bbox_inches='tight',dpi=300)
+    plt.close()
+    
 def plot_pd_heatmaps(results,r=1,c=1,save_path='',title='',subtitles=[]):
     assert len(results)==r*c
-    fig =plt.figure(figsize=(2+c*4,r*4),dpi=300) 
-    # norm = matplotlib.colors.Normalize(vmin=0, vmax=1000)
+    plt.figure(figsize=(8,8)) 
+    fig,ax=plt.subplots(r,c)
+    font_size=8
+    ax=ax.flatten() 
     for i in range(r):
         for j in range(c):
-            plt.subplot(r,c,i*r+j+1)
-            # if i*r+j+1==len(results):
-            #     sns.heatmap(data=results[i*r+j])
-            # else:
-            
-            h=sns.heatmap(data=results[i*r+j])
-            # h=sns.heatmap(data=results[i*r+j],cbar=False)
-            # h3 =plt.contourf(results[i*r+j],cmap = plt.cm.coolwarm,norm = norm)
-            # h3 =plt.contourf(results[i*r+j],cmap = plt.cm.coolwarm)
-            plt.title(subtitles[i*r+j])
-    plt.suptitle(title)
-    fig.subplots_adjust(wspace =0.05)
-    # cb = plt.colorbar(h.collections[0]) #显示colorbar
-    # cb.ax.tick_params()  # 设置colorbar刻度字体大小。
-    # #colorbar 左 下 宽 高 
-    # l = 0.92
-    # b = 0.12
-    # w = 0.015
-    # h = 1 - 2*b 
+            plt.subplot(r,c,i*c+j+1)
+            sns.heatmap(data=results[i*c+j])
+            plt.title(subtitles[i*r+j],fontsize=font_size)
+            # im=ax[i*r+j].imshow(results[i*r+j])
+            # ax[i*r+j].set_xticks(np.arange(0, 10, 1))
+            # ax[i*r+j].set_yticks(np.arange(0, 10, 1))
+            # ax[i*r+j].set_title(subtitles[i*r+j],fontsize=font_size)
 
-    # #对应 l,b,w,h；设置colorbar位置；
-    # rect = [l,b,w,h] 
-    # cbar_ax = fig.add_axes(rect) 
-    # cb = plt.colorbar(h3, cax=cbar_ax)
-
-    # #设置colorbar标签字体等
-    # cb.ax.tick_params(labelsize=16)  #设置色标刻度字体大小。
-    # font = {'family' : 'serif',
-    # #       'color'  : 'darkred',
-    #     'color'  : 'black',
-    #     'weight' : 'normal',
-    #     'size'   : 16,
-    #     } 
+    # cb = fig.colorbar(im, ax=ax,fraction=0.014, pad=0.05) 
+    # cb.ax.tick_params(labelsize=font_size)  
+    # cb.set_label('Number',fontsize=font_size)
+    
     if save_path!='': 
-        plt.savefig(save_path, bbox_inches='tight')
+        plt.savefig(save_path, bbox_inches='tight',dpi=300)
     plt.close()
     
 def plot_pr(precision,recall,save_path=''):
@@ -477,6 +487,31 @@ def plot_accs_zhexian(group_accs,branches_name,title,x_legend,save_path="",xlabe
         plt.plot(x_legend, group_acc, marker=markers[i], linestyle=linestyles[i],linewidth=3, markersize=8)  # 绘制折线图，添加数据点，设置点的大小
     plt.grid()
     plt.legend(branches_name,fontsize=10) 
+    if save_path!='': 
+        plt.savefig(save_path,dpi=300, bbox_inches='tight')
+    plt.close() 
+
+
+def plot_zhexian_with_bg(group_accs,branches_name,title,x_legend,save_path="",xlabel="",ylabel='Number',color=[],
+                         group_split=[]):
+    assert len(branches_name)==len(group_accs)
+    assert (len(branches_name)==len(color))if color!=[] else True
+    plt.title('{}'.format(title))
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.xticks([])  
+    markers=['o','X','*','^','D','s']
+    linestyles=['-','dotted','--',':','-.','dashdot']
+    for i,group_acc in enumerate(group_accs):
+        # plt.bar(x_legend, group_acc)  # 绘制折线图，添加数据点，设置点的大小
+        plt.plot(x_legend, group_acc, marker=markers[i], linestyle=linestyles[i],linewidth=2, markersize=4)  # 绘制折线图，添加数据点，设置点的大小
+     
+    plt.axvspan(xmin=0,xmax=group_split[0]-1, facecolor='#1f77b4' , alpha=0.2)
+    plt.axvspan(xmin=group_split[0]-1,xmax=group_split[0]+group_split[1]-1, facecolor='#ff7f0e', alpha=0.2)
+    plt.axvspan(xmin=group_split[0]+group_split[1]-1,xmax=group_split[0]+group_split[1]+group_split[2]-1, facecolor='#ee82ee', alpha=0.2)   
+    
+    plt.legend(['Head','Medium','Tail']+branches_name,fontsize=10) 
+    plt.xlim(0,99)
     if save_path!='': 
         plt.savefig(save_path,dpi=300, bbox_inches='tight')
     plt.close() 

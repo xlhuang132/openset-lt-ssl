@@ -611,31 +611,38 @@ class BaseTrainer():
                 cos_sim= cosine_similarity(feature.detach(),feature.detach()) 
                 return cos_sim.cpu().numpy()
     
-    def get_test_data_pred_gt_feat(self):
+    def get_test_data_pred_gt_feat(self,return_confidence=False):
         model=self.get_val_model()
         model.eval()
         pred=[]
         gt=[]
         feat=[]
+        confidence=[]
         with torch.no_grad():
-            for  i, (inputs, targets, _) in enumerate(self.test_loader):
+            for  i, (inputs, targets, _) in enumerate(self.val_loader):
                 inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
 
                 # compute output
                 outputs = model(inputs,training=False)
                 feature=model(inputs,return_encoding=True)
                 # feature=model(feature,return_projected_feature=True)
-                score_result = self.func(outputs)
-                now_result = torch.argmax(score_result, 1)   
+                
+                p = outputs.softmax(dim=1)  # soft pseudo labels
+                con, pred_class = torch.max(p.detach(), dim=1) 
+                p=torch.gather(p, dim=1, index=targets.long().unsqueeze(1))
+                confidence.append(p.cpu())
                 gt.append(targets.cpu())   
-                pred.append(now_result.cpu())
+                pred.append(pred_class.cpu())
                 feat.append(feature.cpu())
             pred=torch.cat(pred,dim=0)
             gt=torch.cat(gt,dim=0)
             feat=torch.cat(feat,dim=0)
-        return gt,pred,feat
+            confidence=torch.cat(confidence,dim=0)
+        if not return_confidence:
+            return gt,pred,feat
+        else:return gt,pred,feat,confidence
                
-    def get_train_dl_data_pred_gt_feat(self):
+    def get_train_dl_data_pred_gt_feat(self,return_confidence=False):
         model=self.get_val_model()
         model.eval()
         pred=[]
@@ -661,12 +668,13 @@ class BaseTrainer():
             feat=torch.cat(feat,dim=0)
         return gt,pred,feat
     
-    def get_train_du_data_pred_gt_feat(self):
+    def get_train_du_data_pred_gt_feat(self,return_confidence=False):
         model=self.get_val_model()
         model.eval()
         pred=[]
         gt=[]
         feat=[]
+        confidence=[]
         with torch.no_grad():
             for  i, (inputs, targets, _) in enumerate(self.test_unlabeled_trainloader):
                 if isinstance(inputs,list):
@@ -676,16 +684,22 @@ class BaseTrainer():
                 # compute output
                 outputs = model(inputs)
                 feature=model(inputs,return_encoding=True)
-                feature=model(feature,return_projected_feature=True)
-                score_result = self.func(outputs)
-                now_result = torch.argmax(score_result, 1)   
+                # feature=model(feature,return_projected_feature=True)
+                
+                p = outputs.softmax(dim=1)  # soft pseudo labels
+                con, pred_class = torch.max(p.detach(), dim=1) 
+                p=torch.gather(p, dim=1, index=targets.long().unsqueeze(1))
+                confidence.append(p.cpu())
                 gt.append(targets.cpu())   
-                pred.append(now_result.cpu())
+                pred.append(pred_class.cpu())
                 feat.append(feature.cpu())
             pred=torch.cat(pred,dim=0)
             gt=torch.cat(gt,dim=0)
             feat=torch.cat(feat,dim=0)
-        return gt,pred,feat    
+            confidence=torch.cat(confidence,dim=0)
+        if not return_confidence:
+            return gt,pred,feat
+        else:return gt,pred,feat,confidence
     
     def eval_loop(self,model,valloader,criterion):
         losses = AverageMeter() 

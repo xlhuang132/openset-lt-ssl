@@ -7,20 +7,16 @@ SAVE_EPOCH: 10
 MAX_EPOCH: 500
 TRAIN_STEP: 500 # 
 ALGORITHM:
-  NAME: "DCSSL"
-  CONFIDENCE_THRESHOLD: 0.95  
-  DCSSL: 
-    LAMBDA_D: 0.2
-    DCSSL_CONTRA_TEMPERTURE: 0.07 
-    WARMUP_EPOCH: 1
-    CONTRAST_THRESH: 0.9 
-    # ID_MASK_PATH: '/home/aa/xlhuang/Openset-LT-SSL/outputs/svhn/OODDetect/WRN_28_2/DL-150-IF-100-DU4500-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
-    LOSS_VERSION: 12
+  NAME: "OODDetect"   
+   
+  OOD_DETECTOR:
+    TEMPERATURE: 0.5 
+    THRESH_PERCENT: 0.9
+    K: 50 
     
-
 MODEL:
-  NAME:  "WRN_28_2" #"Resnet50"   
-   # =========================== 
+  NAME: "WRN_28_2"     
+ 
 DATASET:
   NAME: "svhn"
   ROOT: "./data/svhn" 
@@ -37,11 +33,11 @@ DATASET:
   DU:
     ID:
       NUM_UNLABELED_HEAD: 4500
-      # IMB_FACTOR_UL: 100 
+      # IMB_FACTOR_UL: 100
     OOD:
       ENABLE: True
       DATASET: 'TIN'
-      RATIO: 0.0 #    
-      INCLUDE_ALL: True 
- 
- 
+      RATIO: 0.0   
+      INCLUDE_ALL: True  
+
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/OODDetect/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/models/checkpoint.pth'
