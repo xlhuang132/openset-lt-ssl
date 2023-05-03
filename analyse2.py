@@ -123,11 +123,12 @@ def analyse1(cfg):
  
 # 2. 统计OOD样本被错分为哪个类
 def analyse2(cfg):
-    algs=['FixMatch','DCSSL','MixMatch','OpenMatch' ,'DCSSL']#['MixMatch','FixMatch', 'OpenMatch' ,'CCSSL','DCSSL']
+    algs=['FixMatch','DCSSL','OpenMatch','CReST','DASO' ,'DCSSL']#['MixMatch','FixMatch', 'OpenMatch' ,'CCSSL','DCSSL']
     mis_ood=[]
     cls_id=[]
-    legends=['FixMatch-0.95','FixMatch-CT','MixMatch','OpenMatch' ,'DeCAB (Ours)']
+    legends=['FixMatch-0.95','FixMatch-CT','OpenMatch','CReST','DASO','DeCAB (Ours)']
     i=0
+    print(plt.rcParams)
     for item in algs:
         cfg.defrost()
         cfg.ALGORITHM.NAME=item
@@ -151,9 +152,10 @@ def analyse2(cfg):
         # cls_id.append(list(result))
     path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'mis_du_ood.jpg') 
     plot_zhexian_with_bg(mis_ood, legends, 
-                         'MixClassified OOD Data', 
+                         'Number of Misclassified OOD Data @CIFAR100-LT($IF$100, TIN)', 
                          np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),
                          group_split=cfg.DATASET.GROUP_SPLITS,
+                         xlabel='Class ID',
                          save_path=path)    
     # path=os.path.join(get_DL_dataset_alg_DU_dataset_path(cfg),'cls_du_id.jpg')
     # plot_accs_zhexian(cls_id, algs, 'Unlabeled ID Data', np.array([i+1 for i in range(cfg.DATASET.NUM_CLASSES)]),save_path=path)
@@ -448,7 +450,7 @@ def analyse8(cfg):
         correct_conf=conf[correct_index]
         tmp_conf=[]
         tmp_dis=[]
-        for c in [7,8,9]:  #range(cfg.DATASET.NUM_CLASSES)
+        for c in range(cfg.DATASET.NUM_CLASSES): #[7,8,9]:  #
             select_index= torch.nonzero(tmp_gt == c, as_tuple=False).squeeze(1)
             prototypes[c] = tmp_feat[select_index].mean(dim=0) 
             c_conf=correct_conf[select_index]

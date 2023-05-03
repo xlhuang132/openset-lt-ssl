@@ -51,10 +51,7 @@ DATASET:
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      DATASET: 'TIN'
+      DATASET: 'LSUN' #'TIN'
       RATIO: 0.0   
       INCLUDE_ALL: True  
-# 
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_13/models/checkpoint.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_13/models/checkpoint.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar10/DCSSL/WRN_28_2/DL-1500-IF-100-DU3000-IF_U-100/OOD-TIN-all/v_4/models/checkpoint.pth'
+ 

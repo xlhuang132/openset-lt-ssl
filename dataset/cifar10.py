@@ -83,11 +83,12 @@ def get_cifar10(root, out_dataset, start_label=0,ood_ratio=0,
             reverse_ul_dist=reverse_ul_dist,
             seed=seed
         )
-    if cfg.DATASET.DU.OOD.INCLUDE_ALL:        
-        ul_train=ood_inject(ul_train,ood_root,ood_dataset,include_all=True)
+    if cfg.DATASET.DU.OOD.INCLUDE_ALL:         
+        ul_train=ood_inject(ul_train,ood_root,ood_dataset=ood_dataset,include_all=True)
+        # ul_train=ood_inject(ul_train,ood_root,ood_dataset,include_all=True)
     else:
         if ood_r>0:
-            ul_train=ood_inject(ul_train,ood_root,ood_r,ood_dataset)
+            ul_train=ood_inject(ul_train,ood_root,ood_r=ood_r,ood_dataset=ood_dataset)
     
     labeled_data_num=len(l_train['labels'])
     domain_labels=np.hstack((np.ones_like(l_train['labels'],dtype=np.float32),np.zeros_like(ul_train['labels'],dtype=np.float32)))

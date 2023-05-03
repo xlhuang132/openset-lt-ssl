@@ -11,7 +11,7 @@ ALGORITHM:
   CONFIDENCE_THRESHOLD: 0.95  
   DCSSL:   
     CONTRAST_THRESH: 0.9 
-    LOSS_VERSION: 9
+    LOSS_VERSION: 12
 MODEL:
   NAME: "WRN_28_2"
    
@@ -44,6 +44,6 @@ DATASET:
 # 5. 统计 train-test数据之间的特征均值方差之差
 # 6. 是否有OOD样本的混淆矩阵
 # 7. cosine 热力图case
-# 7. confidence-distance 图
+# 8. confidence-distance 图
 
-ANALYSE_TYPE: [6] 
+ANALYSE_TYPE: [8] 

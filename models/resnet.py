@@ -3,7 +3,7 @@ import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
 from models.projector import  Projector 
-__all__ = ['resnet18', 'resnet34', 'Resnet50', 'resnet101', 'resnet152']
+__all__ = ['Resnet18', 'resnet34', 'Resnet50', 'resnet101', 'resnet152']
 
 
 model_urls = {
@@ -135,7 +135,7 @@ class PreActBlock(nn.Module):
 class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000,with_fc=True, zero_init_residual=False,
-                 groups=1, width_per_group=64, norm_layer=None, bias=True):
+                 groups=1, width_per_group=64, norm_layer=None, bias=True,model_name='Resnet50'):
         super(ResNet, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d 
@@ -154,7 +154,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) 
         self.fc = nn.Linear(512 * block.expansion, num_classes, bias=bias)
         
-        self.projector=Projector(model_name='Resnet50')
+        self.projector=Projector(model_name=model_name)
         self.linear_rot = nn.Linear(512*block.expansion, 4, bias=bias)
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -227,14 +227,16 @@ def resnet10(pretrained=False, **kwargs):
     model = ResNet(BasicBlock, [1, 1, 1, 1], **kwargs)
     return model
 
-def resnet18(pretrained=False, **kwargs):
+def Resnet18(cfg=None,num_classes=10):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+    if cfg is not None:
+        num_classes=cfg.DATASET.NUM_CLASSES 
+    model = ResNet(BasicBlock, [2, 2, 2, 2],model_name='Resnet18', num_classes=num_classes)
+    # if pretrained:
+    #     model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
     return model
 
 
@@ -243,7 +245,7 @@ def resnet34(pretrained=False, **kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(BasicBlock, [3, 4, 6, 3], **kwargs)
+    model = ResNet(BasicBlock, [3, 4, 6, 3],model_name='Resnet34', **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
     return model
@@ -259,9 +261,9 @@ def Resnet50(cfg=None,num_classes=10):
         fc2_enable=cfg.MODEL.DUAL_HEAD_ENABLE
         fc2_out_dim=cfg.MODEL.DUAL_HEAD_OUT_DIM
         if fc2_out_dim==0:fc2_out_dim=None
-        model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes)
+        model = ResNet(Bottleneck, [3, 4, 6, 3],model_name='Resnet50', num_classes=num_classes)
     else: 
-        model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes)
+        model = ResNet(Bottleneck, [3, 4, 6, 3],model_name='Resnet50', num_classes=num_classes)
     return model
 
 

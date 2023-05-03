@@ -147,6 +147,8 @@ class CReSTTrainer(FixMatchTrainer):
             self.logger.info('=='*30)
     
         else:
+            if self.iter>self.warmup_iter and self.iter % self.gen_period_steps==0:
+                self._build_new_generation()
             self.logger.info("=="*30)
         
         

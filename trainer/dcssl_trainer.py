@@ -102,9 +102,9 @@ class DCSSLTrainer(BaseTrainer):
                     self.best_val_iter=self.iter
                     self.save_checkpoint(file_name="best_model.pth")
                 if self.epoch%self.save_epoch==0:
-                    if self.epoch%100==0:
-                        self.save_checkpoint(file_name="checkpoint_{}.pth".format(self.epoch))
-                    else:
+                    # if self.epoch%100==0:
+                    #     self.save_checkpoint(file_name="checkpoint_{}.pth".format(self.epoch))
+                    # else:
                         self.save_checkpoint()
                 self.train_losses.append(self.losses.avg)
                 self.logger.info("== Pretraining is enable:{}".format(self.pretraining))
@@ -157,8 +157,8 @@ class DCSSLTrainer(BaseTrainer):
         u_index=data_u[2]
         u_index=u_index.long().cuda()
         
-# D        if isinstance(inputs_x,list):
-#             inputs_x=inputs_x[0]
+        if isinstance(inputs_x_w,list):
+            inputs_x_w=inputs_x_w[0]
         # inputs = torch.cat(
         #         [inputs_x_w,inputs_x_s,inputs_x_s2, inputs_u_w, inputs_u_s, inputs_u_s1],
         #         dim=0).cuda()
@@ -184,8 +184,8 @@ class DCSSLTrainer(BaseTrainer):
         loss_cls=self.l_criterion(logits_x, targets_x)
         score_result = self.func(logits_x)
         now_result = torch.argmax(score_result, 1)  
-        with torch.no_grad(): 
-            self.update_mean_cov(f_l_w.clone().detach(), targets_x.clone().detach())
+        # with torch.no_grad(): 
+        #     self.update_mean_cov(f_l_w.clone().detach(), targets_x.clone().detach())
          
         # 2. cons loss 
         # filter out low confidence pseudo label by self.cfg.threshold 

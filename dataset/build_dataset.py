@@ -44,8 +44,8 @@ def build_dataset(cfg,logger=None,test_mode=False):
     if dataset_name=='semi-iNat':
         transform_labeled = ListTransform(cfg.SEMI_INAT.LPIPELINES)
         transform_ulabeled = ListTransform(cfg.SEMI_INAT.UPIPELINES)
-        if cfg.ALGORITHM=='Chasm':
-            transform_labeled=transform_ulabeled
+        
+        
         transform_val = BaseTransform(cfg.SEMI_INAT.VPIPELINE )
         train_unlabeled_dataset = MyDataset(names_file=cfg.SEMI_INAT.U_ANNO_FILE, 
                                             transform=transform_ulabeled,
@@ -89,7 +89,8 @@ def build_dataset(cfg,logger=None,test_mode=False):
     transform_train,transform_train_ul,transform_val=build_transform(cfg)
     if dataset_name=='cifar10':
         datasets=get_cifar10(dataset_root,  ood_dataset,ood_ratio=ood_ratio, 
-                 transform_train=transform_train,transform_train_ul=transform_train_ul, transform_val=transform_val,
+                 transform_train=transform_train,
+                 transform_train_ul=transform_train_ul, transform_val=transform_val,
                  download=True,cfg=cfg,logger=logger,test_mode=test_mode)
     elif dataset_name=='cifar100':
         datasets=get_cifar100(dataset_root,  ood_dataset, ood_ratio=ood_ratio, 

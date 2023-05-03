@@ -45,14 +45,14 @@ def plot_dots(x=[],y=[],titles=[],save_path='',mode='e'):
     for i in range(n):
         plt.subplot(2,2,i+1)
         ax[i].scatter(x[i], y[i],marker='o',s=1)
-        ax[i].set_title(titles[i])
-        ax[i].set_xlabel('Confidence') 
+        ax[i].set_title(titles[i], fontproperties=font_h) 
+        ax[i].set_xlabel('Confidence', fontproperties=font_h) 
         if mode=='e':
-            ax[i].set_ylabel('Euclidean Distance')
+            ax[i].set_ylabel('Euclidean Distance', fontproperties=font_h)
         else:    
-            ax[i].set_ylabel('Cosine Distance')    
-        ax[i].set_xticks(xticks) 
-        ax[i].set_yticks(yticks)    
+            ax[i].set_ylabel('Cosine Distance', fontproperties=font_h)   
+        ax[i].set_xticks(xticks)
+        ax[i].set_yticks(yticks)
         
     fig.tight_layout()
     if save_path!='': 
@@ -126,7 +126,7 @@ def plot_group_acc_over_epoch(group_acc,legend=['Many','Medium','Few'],title="Gr
     #     plt.axvline(2, color='r')
     plt.legend(legend)
     if save_path!='':
-        plt.savefig(save_path, bbox_inches='tight')
+        plt.savefig(save_path, bbox_inches='tight',dpi=300)
     plt.close()
     
 def plot_loss_over_epoch(losses,title,save_path=''):
@@ -136,7 +136,7 @@ def plot_loss_over_epoch(losses,title,save_path=''):
     x=[i for i in range(1,len(losses)+1)]
     plt.plot(x, losses, markersize=3)  # 绘制折线图，添加数据点，设置点的大小
     if save_path!='':
-        plt.savefig(save_path, bbox_inches='tight')
+        plt.savefig(save_path, bbox_inches='tight',dpi=300)
     plt.close()
 
 def plot_acc_over_epoch(acc,title="Average Accuracy",save_path=''):
@@ -146,7 +146,7 @@ def plot_acc_over_epoch(acc,title="Average Accuracy",save_path=''):
     x=[i for i in range(1,len(acc)+1)]
     plt.plot(x, acc, markersize=3)  # 绘制折线图，添加数据点，设置点的大小
     if save_path!='':
-        plt.savefig(save_path, bbox_inches='tight')
+        plt.savefig(save_path, bbox_inches='tight',dpi=300)
     plt.close()
 
   
@@ -496,10 +496,11 @@ def plot_zhexian_with_bg(group_accs,branches_name,title,x_legend,save_path="",xl
                          group_split=[]):
     assert len(branches_name)==len(group_accs)
     assert (len(branches_name)==len(color))if color!=[] else True
-    plt.title('{}'.format(title))
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    
+    plt.xlabel(xlabel,fontproperties=font_h)
+    plt.ylabel(ylabel,fontproperties=font_h)
     plt.xticks([])  
+    plt.yticks(fontproperties=font_h)
     markers=['o','X','*','^','D','s']
     linestyles=['-','dotted','--',':','-.','dashdot']
     for i,group_acc in enumerate(group_accs):
@@ -510,8 +511,17 @@ def plot_zhexian_with_bg(group_accs,branches_name,title,x_legend,save_path="",xl
     plt.axvspan(xmin=group_split[0]-1,xmax=group_split[0]+group_split[1]-1, facecolor='#ff7f0e', alpha=0.2)
     plt.axvspan(xmin=group_split[0]+group_split[1]-1,xmax=group_split[0]+group_split[1]+group_split[2]-1, facecolor='#ee82ee', alpha=0.2)   
     
-    plt.legend(['Head','Medium','Tail']+branches_name,fontsize=10) 
-    plt.xlim(0,99)
+    plt.legend(branches_name+['Head','Medium','Tail'],fontsize=8, prop=font_h) 
+    # ff= {  # 用 dict 单独指定 title 样式
+    # 'family': 'sans-serif',
+    # 'weight': 'normal', 
+    # 'size': 12,
+    # 'usetex' : True,
+    # }  
+    # # font_h['usetex']=True
+    # plt.title(r'{}'.format(title),ff)
+    plt.title(title,fontproperties=font_h)
+    plt.xlim(0,group_split[0]+group_split[1]+group_split[2]-1)
     if save_path!='': 
         plt.savefig(save_path,dpi=300, bbox_inches='tight')
     plt.close() 

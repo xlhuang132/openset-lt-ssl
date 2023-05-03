@@ -13,9 +13,12 @@ class Projector(nn.Module):
             elif model_name == 'WRN_28_8':
                 self.linear_1 = nn.Linear(512, 128)
                 self.linear_2 = nn.Linear(128, 64)
+            elif model_name == 'Resnet18':
+                self.linear_1 = nn.Linear(512, 128)
+                self.linear_2 = nn.Linear(128, 64)
             elif model_name == 'Resnet34':
                 self.linear_1 = nn.Linear(512, 128)
-                self.linear_2 = nn.Linear(128, 128)
+                self.linear_2 = nn.Linear(128, 64)
             elif model_name == 'Resnet50':
                 self.linear_1 = nn.Linear(2048, 512)
                 self.linear_2 = nn.Linear(512, 64) 

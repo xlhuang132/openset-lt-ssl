@@ -31,7 +31,7 @@ DATASET:
       # IMB_FACTOR_UL: 100 
     OOD:
       ENABLE: True
-      # INCLUDE_ALL: True
-      DATASET: 'TIN'
+      INCLUDE_ALL: True
+      DATASET: 'LSUN' # 'TIN'
       RATIO: 0.0 
   NUM_WORKERS: 4
