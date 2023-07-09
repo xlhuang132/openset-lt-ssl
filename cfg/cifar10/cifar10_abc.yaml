@@ -1,0 +1,41 @@
+
+
+OUTPUT_DIR: "outputs/"
+SHOW_STEP: 100
+SAVE_EPOCH: 10
+TRAIN_STEP: 500  
+MAX_EPOCH: 500
+ALGORITHM:
+  NAME: "ABC" 
+  
+  # OOD_DETECTOR:
+  #   ENABLE: True
+
+MODEL:
+  NAME:  "WRN_28_2"  
+  DUAL_HEAD_ENABLE: True
+  DUAL_HEAD_OUT_DIM: 10 
+
+DATASET:
+  NAME: "cifar10"
+  ROOT: "./data/cifar10" 
+  NUM_CLASSES: 10
+  NUM_VALID: 5000
+  GROUP_SPLITS: [3,3,4]
+  IFS: [100]
+  OODRS: [0.5]  
+  DL:
+    NUM_LABELED_HEAD:  500  
+    # IMB_FACTOR_L: 100
+  DU:
+    ID:
+      NUM_UNLABELED_HEAD: 4000  
+      DISTRIBUTION: 'Random'
+      # IMB_FACTOR_UL: 100
+      # REVERSE_UL_DISTRIBUTION: True
+    OOD:
+      ENABLE: True
+      DATASET: 'TIN'  
+      # RATIO: 0.0  
+      # INCLUDE_ALL: True
+  
