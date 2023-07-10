@@ -47,13 +47,7 @@ class DASOTrainer(BaseTrainer):
         if self.warmup_enable:
             self.rebuild_unlabeled_dataset_enable=True
             
-    def train_step(self,pretraining=False):
-        if self.pretraining:
-            return self.train_warmup_step()
-        else:
-            return self.train_daso_step()
-        
-    def train_daso_step(self):
+    def train_step(self,pretraining=False): 
         self.model.train()
         loss =0
         # DL  

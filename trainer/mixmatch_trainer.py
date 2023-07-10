@@ -42,6 +42,8 @@ class MixMatchTrainer(BaseTrainer):
         except:
             self.labeled_train_iter=iter(self.labeled_trainloader)
             inputs_x, targets_x,_ = self.labeled_train_iter.next() 
+        if isinstance(inputs_x, list):
+            inputs_x=inputs_x[0]
         batch_size=inputs_x.size(0)
         
         # DU    

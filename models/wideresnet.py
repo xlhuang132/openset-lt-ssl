@@ -58,6 +58,7 @@ class Normalize(nn.Module):
         norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power)
         out = x.div(norm)
         return out
+    
 class WideResNet(nn.Module):
     def __init__(self, num_classes, depth=28, widen_factor=2,feature_dim=64,fc2_enable=False,fc2_out_dim=None, dropRate=0.0):
         super(WideResNet, self).__init__()
@@ -85,11 +86,15 @@ class WideResNet(nn.Module):
     def reset_classifier(self,):
         self.fc = Classifier(self.encoder.out_features, self.encoder.num_classes).cuda()
     
-    def forward(self, x,return_encoding=False,return_projected_feature=False,classifier=False,training=True): 
+    def forward(self, x,return_encoding=False,return_projected_feature=False,classifier=False,classifier1=False,classifier2=False,training=True): 
         if return_projected_feature:# 输入的encoding
             # pfeat = self.l2norm(self.projector(x))
             pfeat = self.projector(x,normalized=True)
             return pfeat
+        if classifier1:
+            return self.fc(x)
+        if classifier2:
+            return self.fc2(x)
         if classifier:
             # if self.fc2_enable:
             #     return self.fc(x),self.fc2(x)

@@ -7,13 +7,13 @@ import numpy as np
 from dataset.build_dataloader import *
 from loss.build_loss import build_loss 
 import models 
-# import sklearn
+import sklearn
 import time 
 import torch.optim as optim
 from models.feature_queue import FeatureQueue
 import os   
 import datetime
-# import faiss
+import faiss
 from utils.utils import *
 import torch.nn.functional as F
 from utils.plot import plot_pr
@@ -24,10 +24,12 @@ from utils.utils import cal_metric,print_results
 from dataset.build_dataloader import _build_loader
 from dataset.base import BaseNumpyDataset
 from utils import FusionMatrix
-from utils.ema_model import EMAModel
-
+from utils.ema_model import create_ema_model,WeightEMA
+from loss.soft_supconloss import SoftSupConLoss
 from loss.contrastive_loss import * 
 from models.projector import  Projector 
+
+from utils import OODDetectFusionMatrix
 
 def cosine_similarity(x1, x2, eps=1e-12):
     w1 = x1.norm(p=2, dim=1, keepdim=True)
@@ -46,11 +48,7 @@ class BaseTrainer():
         # =================== build model =============
         self.ema_enable=False
         self.model = models.__dict__[cfg.MODEL.NAME](cfg=cfg)
-        self.ema_model = EMAModel(
-            self.model,
-            cfg.MODEL.EMA_DECAY,
-            cfg.MODEL.EMA_WEIGHT_DECAY, 
-        )
+        self.ema_model = create_ema_model(self.model)
         self.model=self.model.cuda()
         # self.ema_model=self.ema_model.cuda()
         # =================== build dataloader =============
@@ -60,7 +58,10 @@ class BaseTrainer():
         self.build_loss()
         # ========== build optimizer ===========         
         self.optimizer = get_optimizer(cfg, self.model)
-        
+        self.ema_optimizer = WeightEMA(
+            self.model, self.ema_model, 
+            cfg.MODEL.OPTIMIZER.BASE_LR, 
+            alpha=cfg.MODEL.EMA_DECAY)
         # ========== build dataloader ==========     
         
         self.max_epoch=cfg.MAX_EPOCH 
@@ -81,9 +82,8 @@ class BaseTrainer():
         self.train_losses=[]
         self.val_losses=[]
         self.test_losses=[]
-        
         self.conf_thres=cfg.ALGORITHM.CONFIDENCE_THRESHOLD   
-        
+        self.ood_detect_confusion_matrix=OODDetectFusionMatrix(self.num_classes)
         self.iter=0
         self.best_val=0
         self.best_val_iter=0
@@ -99,20 +99,22 @@ class BaseTrainer():
         self.ul_num=len(self.unlabeled_trainloader.dataset)  
         self.id_masks=torch.ones(self.ul_num).cuda()
         self.ood_masks=torch.zeros(self.ul_num).cuda() 
-        self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE
-        self.warmup_iter=cfg.ALGORITHM.PRE_TRAIN.WARMUP_EPOCH*self.train_per_step 
-        self.feature_dim=64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8','Resnet50'] else 128 
+        self.warmup_temperature=self.cfg.ALGORITHM.PRE_TRAIN.SimCLR.TEMPERATURE 
+        self.warmup_loss=SoftSupConLoss(temperature=self.warmup_temperature) 
+        self.warmup_iter=cfg.ALGORITHM.MOOD.WARMUP_EPOCH*self.train_per_step 
+        self.feature_dim=64 if self.cfg.MODEL.NAME in ['WRN_28_2','WRN_28_8','Resnet50',"Resnet34"] else 128 
         self.k=cfg.ALGORITHM.OOD_DETECTOR.K    
         self.id_thresh_percent=cfg.ALGORITHM.OOD_DETECTOR.THRESH_PERCENT
         self.ood_detect_fusion = FusionMatrix(2)   
-        self.id_detect_fusion = FusionMatrix(2)  
-        # self.update_domain_y_iter=cfg.ALGORITHM.OOD_DETECTOR.DOMAIN_Y_UPDATE_ITER
-        # self.ood_threshold=cfg.ALGORITHM.OOD_DETECTOR.OOD_THRESHOLD
-        # self.id_threshold=cfg.ALGORITHM.OOD_DETECTOR.ID_THRESHOLD
+        self.id_detect_fusion = FusionMatrix(2)          
+        self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num  
         self.rebuild_unlabeled_dataset_enable=False        
         self.opearte_before_resume()
+        self.ood_filter_enable=cfg.ALGORITHM.OOD_DETECTOR.ENABLE
+        if self.ood_filter_enable:
+            self.load_id_masks()
+        
         if cfg.DATASET.NAME!='semi-iNat':
-            self.ul_ood_num=self.unlabeled_trainloader.dataset.ood_num  
             
             l_dataset = self.labeled_trainloader.dataset 
             l_data_np,l_transform = l_dataset.select_dataset(return_transforms=True)
@@ -337,71 +339,6 @@ class BaseTrainer():
         self.labeled_train_iter=iter(self.labeled_trainloader)
         return   
     
-    def train_warmup_step_by_dl_contra(self):
-        self.model.train()
-        loss =0
-        # DL  
-        try:
-            (inputs_x,inputs_x2), targets,_ = self.pre_train_iter.next()  
-        except:            
-            self.pre_train_iter=iter(self.pre_train_loader)            
-            (inputs_x,inputs_x2),targets,_ = self.pre_train_iter.next()  
-            
-        inputs_x, inputs_x2 = inputs_x.cuda(), inputs_x2.cuda()         
-        out_1 = self.model(inputs_x,return_encoding=True) 
-        out_2 = self.model(inputs_x2,return_encoding=True)  
-        out_1=self.model(out_1,return_projected_feature=True) 
-        out_2=self.model(out_2,return_projected_feature=True) 
-        similarity  = pairwise_similarity(out_1,out_2,temperature=self.warmup_temperature) 
-        mask= torch.eq(\
-            targets.contiguous().view(-1, 1).cuda(), \
-            targets.contiguous().view(-1, 1).cuda().T).float()
-        
-        loss        = SCL(similarity,mask) 
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.losses.update(loss.item(),inputs_x.size(0))
-        
-        if self.ema_enable:
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            ema_decay =self.ema_model.update(self.model, step=self.iter, current_lr=current_lr)
-        if self.iter % self.cfg.SHOW_STEP==0:
-            self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} =='\
-                .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses.val,self.losses_x.avg,self.losses_u.val))
-        return 
-    
-    def train_warmup_step(self): #
-        self.model.train() 
-        loss =0
-        # DL  
-        try:
-            (inputs_x,inputs_x2), _,_ = self.pre_train_iter.next()    
-        except:            
-            self.pre_train_iter=iter(self.pre_train_loader)            
-            (inputs_x,inputs_x2),_,_ = self.pre_train_iter.next()  
-        inputs_x, inputs_x2 = inputs_x.cuda(), inputs_x2.cuda() 
-        
-        out_1 = self.model(inputs_x,return_encoding=True) 
-        out_2 = self.model(inputs_x2,return_encoding=True)  
-        out_1=self.model(out_1,return_projected_feature=True)
-        out_2=self.model(out_2,return_projected_feature=True)
-                
-        similarity  = pairwise_similarity(out_1,out_2,temperature=self.warmup_temperature) 
-        loss        = NT_xent(similarity) 
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.losses.update(loss.item(),inputs_x.size(0))
-        
-        if self.ema_enable:
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            ema_decay =self.ema_model.update(self.model, step=self.iter, current_lr=current_lr)
-        if self.iter % self.cfg.SHOW_STEP==0:
-            self.logger.info('== Epoch:{} Step:[{}|{}] Total_Avg_loss:{:>5.4f} Avg_Loss_x:{:>5.4f}  Avg_Loss_u:{:>5.4f} =='\
-                .format(self.epoch,self.iter%self.train_per_step if self.iter%self.train_per_step>0 else self.train_per_step,self.train_per_step,self.losses.val,self.losses_x.avg,self.losses_u.val))
-        return 
-    
     def train_step(self,pretraining=False):
         pass
     
@@ -486,6 +423,74 @@ class BaseTrainer():
             )
         self.unlabeled_train_iter = iter(new_loader)
     
+    def load_id_masks(self):
+        
+        if self.cfg.ALGORITHM.NAME=='MOOD' and self.cfg.ALGORITHM.ABLATION.ENABLE:
+            if self.cfg.ALGORITHM.ABLATION.MOOD.OOD_DETECTION:
+                id_mask_path=os.path.join(self.model_dir.replace(self.cfg.ALGORITHM.NAME,'OODDetect'),'checkpoint.pth')
+                # id_mask_path=os.path.join(self.model_dir.replace(foldername,'OODDetect'),'checkpoint.pth')
+                idx1=id_mask_path.find('OOD-TIN-r-0.50')
+                idx2=id_mask_path.find('/models')
+                id_mask_path=id_mask_path[:idx1+len('OOD-TIN-r-0.50')]+id_mask_path[idx2:]
+       
+            else:return
+        else:
+                
+            if self.ood_filter_enable:
+                id_mask_path=os.path.join(self.model_dir.replace(self.cfg.ALGORITHM.NAME+'+OOD-F.','OODDetect'),'checkpoint.pth')
+            else:
+                if self.cfg.ALGORITHM.NAME=='MOOD':
+                    foldername=self.cfg.ALGORITHM.NAME+(self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE if self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE!='PAP' else '')
+                else:
+                    foldername=self.cfg.ALGORITHM.NAME
+                id_mask_path=os.path.join(self.model_dir.replace(foldername,'OODDetect'),'checkpoint.pth')
+        if os.path.exists(id_mask_path):
+            self.logger.info(f"Resuming id_masks from: {id_mask_path}")
+            self.logger.info(' ')
+            state_dict = torch.load(id_mask_path) 
+            self.id_masks=state_dict['id_masks']
+            self.ood_masks=state_dict['ood_masks']   
+            du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
+            
+            self.id_detect_fusion.update(self.id_masks,du_gt)
+            self.ood_detect_fusion.update(self.ood_masks,1-du_gt)        
+            
+            id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
+            ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
+            tpr=self.id_detect_fusion.get_TPR()
+            tnr=self.ood_detect_fusion.get_TPR()  
+            # rebuild dataloader      
+            self.rebuild_id_ood_dataloader()
+            
+            self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
+                format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
+            self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
+             
+            self.logger.info("Successfully loaded the id_mask.") 
+        else:
+            self.logger.info('Id mask path: {} is not existing!'.format(id_mask_path))
+        return
+    
+    def rebuild_id_ood_dataloader(self,):
+        # ID dataloader
+        id_selected_inds=torch.where(self.id_masks==1)[0] 
+        ul_dataset = copy.deepcopy(self.unlabeled_trainloader.dataset)
+        ul_data_np,ul_transform = ul_dataset.select_dataset(indices=id_selected_inds.cpu(),return_transforms=True)
+        new_ul_dataset = BaseNumpyDataset(ul_data_np, transforms=ul_transform,num_classes=self.num_classes)
+        new_loader = _build_loader(self.cfg, new_ul_dataset,has_label=False)
+        self.unlabeled_trainloader=new_loader
+        self.unlabeled_train_iter=iter(self.unlabeled_trainloader) 
+        # OOD dataloader
+        ood_selected_inds=torch.where(self.id_masks==0)[0] 
+        ood_dataset =copy.deepcopy( self.unlabeled_trainloader.dataset)
+        ood_data_np = ul_dataset.select_dataset(indices=ood_selected_inds.cpu())
+        new_ood_dataset = BaseNumpyDataset(ood_data_np, transforms=ul_transform,num_classes=self.num_classes)
+        new_loader = _build_loader(self.cfg, new_ood_dataset,has_label=False)
+        self.unlabeled_ood_trainloader=new_loader
+        self.unlabeled_ood_train_iter=iter(self.unlabeled_ood_trainloader) 
+        
+        return
+    
     def detect_ood(self):
         # normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)        
         l_feat,l_y=self.prepare_feat(self.test_labeled_trainloader)
@@ -503,7 +508,7 @@ class BaseTrainer():
         D2, _ = index.search(l_feat, self.k)
         known= - D2[:,-1] # -最大的距离 
         known.sort() # 从小到大排序 负号
-        thresh = known[round((1-self.id_thresh_percent)*self.l_num)] #known[50] #  known[round(0.05 * self.l_num)]        
+        thresh = known[round(0.05*self.l_num)] #known[50] #  known[round(0.05 * self.l_num)]        
         id_masks= (torch.tensor(novel)>=thresh).float()
         ood_masks=1-id_masks 
         self.id_masks= id_masks
@@ -547,12 +552,7 @@ class BaseTrainer():
     def _rebuild_models(self):
         model = self.build_model(self.cfg) 
         self.model = model.cuda()
-        self.ema_model = EMAModel(
-            self.model,
-            self.cfg.MODEL.EMA_DECAY,
-            self.cfg.MODEL.EMA_WEIGHT_DECAY,
-        )
-        # .cuda() 
+        self.ema_model = create_ema_model(self.model)
         
     def _rebuild_optimizer(self, model):
         self.optimizer = self.build_optimizer(self.cfg, model)
@@ -758,12 +758,7 @@ class BaseTrainer():
         # 2. overwrite entries in the existing state dict
         model_dict.update(pretrained_dict)
         self.model.load_state_dict(model_dict)
-        # self.model.load_state_dict(state_dict["model"]) 
-        try:
-            self.id_masks=state_dict['id_masks']
-            self.ood_masks=state_dict['ood_masks']  
-        except:
-            self.logger.warning('load id_masks or ood_masks wrong!')
+       
         # load ema model 
         try:
             self.ema_model.load_state_dict(state_dict["ema_model"])
@@ -947,7 +942,7 @@ class BaseTrainer():
         probs=torch.zeros(n,self.num_classes) 
         with torch.no_grad():
             for batch_idx,(inputs, targets, idx) in enumerate(dataloader):
-                if len(inputs)==2 or len(inputs)==3:
+                if isinstance(inputs, list):
                     inputs=inputs[0]
                 inputs, targets = inputs.cuda(), targets.cuda()
                 encoding=self.model(inputs,return_encoding=True)

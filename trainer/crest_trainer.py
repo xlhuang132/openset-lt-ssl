@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from .fixmatch_trainer import FixMatchTrainer
 from dataset.base import BaseNumpyDataset
 from utils import FusionMatrix
-from utils.ema_model import EMAModel
+ 
 
 from dataset.build_dataloader import _build_loader
 
@@ -54,14 +54,10 @@ class CReSTTrainer(FixMatchTrainer):
         )
         if self.warmup_enable:
             self.rebuild_unlabeled_dataset_enable=True
+        if self.cfg.RESUME !="":
+            self.load_checkpoint(self.cfg.RESUME) 
 
-    def train_step(self,pretraining=False):
-        if self.pretraining:
-            return self.train_warmup_step()
-        else:
-            return self.train_crest_step()
-    
-    def train_crest_step(self):
+    def train_step(self,pretraining=False): 
         self.model.train()
         loss =0
         # DL  
@@ -79,6 +75,7 @@ class CReSTTrainer(FixMatchTrainer):
             data = self.unlabeled_train_iter.next()
         inputs_u=data[0][0]
         inputs_u2=data[0][1]         
+        u_index=data[2] 
         
         inputs_x, targets_x = inputs_x.cuda(), targets_x.long().cuda(non_blocking=True)        
         inputs_u , inputs_u2= inputs_u.cuda(),inputs_u2.cuda()          
@@ -99,8 +96,7 @@ class CReSTTrainer(FixMatchTrainer):
             # compute pseudo-label
             p = logits_weak.softmax(dim=1)  # soft pseudo labels
             confidence, pred_class = torch.max(p.detach(), dim=1) 
-            loss_weight = confidence.ge(self.conf_thres).float()
-        
+            loss_weight = confidence.ge(self.conf_thres).float()  
         lu = self.ul_criterion(
             logits_strong, pred_class, weight=loss_weight, avg_factor=pred_class.size(0)
         ) 
@@ -125,35 +121,14 @@ class CReSTTrainer(FixMatchTrainer):
     def current_label_dist(self, **kwargs):
         return self.get_label_dist(dataset=self.current_l_dataset, **kwargs)
     
-    def operate_after_epoch(self):
-        if self.warmup_enable:
-            if self.iter<=self.warmup_iter:            
-                self.detect_ood()
-                if self.iter==self.warmup_iter:
-                    self.save_checkpoint(file_name="warmup_model.pth")
-            ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
-            id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
-            self.logger.info("== ood_prec:{:>5.3f} ood_rec:{:>5.3f} id_prec:{:>5.3f} id_rec:{:>5.3f}".\
-                format(ood_pre*100,ood_rec*100,id_pre*100,id_rec*100))
-       
-            
-            if self.iter<self.warmup_iter:   
-                self.ood_detect_fusion.reset() 
-                self.id_detect_fusion.reset()
-            
-            if self.iter>self.warmup_iter and self.iter % self.gen_period_steps==0:
-                self._build_new_generation()
-            
-            self.logger.info('=='*30)
-    
-        else:
-            if self.iter>self.warmup_iter and self.iter % self.gen_period_steps==0:
-                self._build_new_generation()
-            self.logger.info("=="*30)
+    def operate_after_epoch(self): 
+        if self.iter % self.gen_period_steps==0:
+            self._build_new_generation()
+        self.logger.info("=="*30)
         
         
     def _build_new_generation(self):
-        print()
+         
         self.logger.info(
             "{} iters -> {}-th generation".format(
                 self.iter + 1, (self.iter + 1) // self.gen_period_steps + 1
@@ -198,7 +173,7 @@ class CReSTTrainer(FixMatchTrainer):
         selected_inds = []
         selected_labels = []
         for i in range(self.num_classes):
-            inds = torch.where(pred_class == i)[0]
+            inds = torch.where(pred_class == i )[0] 
             if len(inds) == 0:
                 continue
             num_selected = int(self.mu_per_cls[self.num_classes - (i + 1)] * len(inds))

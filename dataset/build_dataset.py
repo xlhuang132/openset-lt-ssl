@@ -87,6 +87,7 @@ def build_dataset(cfg,logger=None,test_mode=False):
     
     ood_ratio=cfg.DATASET.DU.OOD.RATIO
     transform_train,transform_train_ul,transform_val=build_transform(cfg)
+    
     if dataset_name=='cifar10':
         datasets=get_cifar10(dataset_root,  ood_dataset,ood_ratio=ood_ratio, 
                  transform_train=transform_train,

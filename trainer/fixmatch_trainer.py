@@ -29,13 +29,7 @@ class FixMatchTrainer(BaseTrainer):
         if self.cfg.RESUME !="":
             self.load_checkpoint(self.cfg.RESUME)  
      
-    def train_step(self,pretraining=False):
-        if self.pretraining:
-            return self.train_warmup_step()
-        else:
-            return self.train_fixmatch_step()
-    
-    def train_fixmatch_step(self):
+    def train_step(self,pretraining=False): 
         self.model.train()
         loss =0
         # DL  
@@ -55,6 +49,7 @@ class FixMatchTrainer(BaseTrainer):
             data = self.unlabeled_train_iter.next()
         inputs_u=data[0][0]
         inputs_u2=data[0][1]
+        u_index=data[2] 
          
         inputs_x, targets_x = inputs_x.cuda(), targets_x.long().cuda(non_blocking=True)        
         inputs_u , inputs_u2= inputs_u.cuda(),inputs_u2.cuda()          
@@ -75,8 +70,7 @@ class FixMatchTrainer(BaseTrainer):
             # compute pseudo-label
             p = logits_weak.softmax(dim=1)  # soft pseudo labels
             confidence, pred_class = torch.max(p.detach(), dim=1) 
-            loss_weight = confidence.ge(self.conf_thres).float()
-         
+            loss_weight = confidence.ge(self.conf_thres).float() 
         lu = self.ul_criterion(
             logits_strong, pred_class, weight=loss_weight, avg_factor=pred_class.size(0)
         ) 

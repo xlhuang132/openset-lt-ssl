@@ -1,58 +1,36 @@
-from copy import deepcopy
-
+import copy 
 import torch.nn as nn
 
+def create_ema_model(model):
+        ema_model = copy.deepcopy(model) 
+ 
+        for param in ema_model.parameters():
+            param.detach_()
 
-class EMAModel(nn.Module):
+        return ema_model
 
-    def __init__(
-        self,
-        model: nn.Module,
-        ema_decay: float,
-        ema_weight_decay: float, 
-        *,
-        resume: str = None
-    ):
-        super().__init__()
-        # init model
-        ema_model = deepcopy(model) 
-        for p in ema_model.parameters():
-            p.requires_grad_(False)
-
+class WeightEMA(object):
+    def __init__(self, model, ema_model, lr, alpha=0.999, wd=True):
+        self.model = model
         self.ema_model = ema_model
-        self.ema_decay = ema_decay
-        self.ema_weight_decay = ema_weight_decay
+        self.alpha = alpha
+        self.params = list(model.state_dict().values())
+        self.ema_params = list(ema_model.state_dict().values())
+        if wd:
+            self.wd = 0.02 * lr
+        else:
+            self.wd = 0.0
 
-        self.train()
+        for param, ema_param in zip(self.params, self.ema_params):
+            param.data.copy_(ema_param.data)
 
-    def update(self, model, step, current_lr):
-        ema_decay = min(1 - 1 / (step + 1), self.ema_decay)  # EMA warmup
+    def step(self):
+        one_minus_alpha = 1.0 - self.alpha
+        for param, ema_param in zip(self.params, self.ema_params):
+            ema_param = ema_param.float()
+            param = param.float()
+            ema_param.mul_(self.alpha)
+            ema_param.add_(param * one_minus_alpha)
+            # customized weight decay
+            param.mul_(1 - self.wd)
 
-        # parameter update
-        for emp_p, p in zip(self.ema_model.parameters(), model.parameters()):
-            emp_p.data = ema_decay * emp_p.data + (1 - ema_decay) * p.data
-
-        # buffer update (i.e., running mean in BN)
-        for emp_p, p in zip(self.ema_model.buffers(), model.buffers()):
-            emp_p.data = ema_decay * emp_p.data + (1 - ema_decay) * p.data
-
-        # EMA model weight decay
-        self.apply_weight_decay(current_lr)
-        return ema_decay
-
-    def apply_weight_decay(self, current_lr):
-        for m in self.ema_model.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                m.weight.data *= (1.0 - current_lr * self.ema_weight_decay)
-
-    def forward(self, x, return_encoding=False,return_projected_feature=False, **kwargs):
-        # if return_encoding:
-        #     return self.ema_model.encoder(x)
-        # return self.ema_model(x, **kwargs)
-        return self.ema_model(x,return_encoding=return_encoding,return_projected_feature=return_projected_feature)
-
-    def train(self):
-        self.ema_model.train()
-
-    def eval(self):
-        self.ema_model.eval()

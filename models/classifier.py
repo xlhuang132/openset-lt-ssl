@@ -25,9 +25,10 @@ import torch.nn.functional as F
 
 
 class Classifier(nn.Module):
-    def __init__(self, in_features, out_features):
+    def __init__(self, in_features, num_classes):
         super(Classifier, self).__init__()
-        self.fc = nn.Linear(in_features, out_features) 
+        self.in_features=in_features 
+        self.fc = nn.Linear(in_features, num_classes) 
         self._init_weights()
 
     def _init_weights(self):

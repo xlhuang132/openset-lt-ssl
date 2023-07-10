@@ -31,6 +31,7 @@ def get_optimizer(cfg, model):
     """
     Build an optimizer from config.
     """ 
+    
     if cfg.MODEL.OPTIMIZER.TYPE  == "SGD":
         optimizer = torch.optim.SGD(
             model.parameters(),
@@ -49,6 +50,20 @@ def get_optimizer(cfg, model):
         )
     else:
         raise ValueError("Unknown Optimizer: {}".format(cfg.SOLVER.OPTIM_NAME))
+    return optimizer
+
+
+def get_param_optimizer(cfg, params):
+    """
+    Build an optimizer from config.
+    """  
+    optimizer = torch.optim.SGD(
+        params,
+        lr=cfg.MODEL.OPTIMIZER.BASE_LR,
+        momentum=cfg.MODEL.OPTIMIZER.MOMENTUM,
+        weight_decay=cfg.MODEL.OPTIMIZER.WEIGHT_DECAY,
+        nesterov=True,
+    ) 
     return optimizer
 
 def get_scheduler(cfg, optimizer):

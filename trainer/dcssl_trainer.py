@@ -41,7 +41,7 @@ class DCSSLTrainer(BaseTrainer):
         self.final_lambda_d=self.lambda_d 
         self.m=cfg.ALGORITHM.DCSSL.M 
         self.debiased_contra_temperture=cfg.ALGORITHM.DCSSL.DCSSL_CONTRA_TEMPERTURE        
-        self.ood_detect_confusion_matrix=OODDetectFusionMatrix(self.num_classes)
+        
         self.loss_contrast= DebiasSoftConLoss(temperature=self.debiased_contra_temperture)
         self.mixup_alpha=0.5
         self.sharpen_temp=0.5
@@ -66,8 +66,7 @@ class DCSSLTrainer(BaseTrainer):
         self.contrasitive_loss_enable=cfg.ALGORITHM.DCSSL.CONTRASTIVE_LOSS_ENABLE
         if cfg.RESUME!='':
             self.load_checkpoint(cfg.RESUME)
-        if cfg.ALGORITHM.DCSSL.ID_MASK_PATH!='':
-            self.load_id_masks(cfg.ALGORITHM.DCSSL.ID_MASK_PATH)
+        # self.load_id_masks(cfg.ALGORITHM.ID_MASK_PATH)
         
     
     def loss_init(self):
@@ -591,40 +590,7 @@ class DCSSLTrainer(BaseTrainer):
         neg_mask = torch.mm(hard_neg_class_mask,class_mask.T).cuda()   
         return neg_mask
     
-    def load_id_masks(self,resume):
-        self.logger.info(f"Resuming id_masks from: {resume}")
-        self.logger.info(' ')
-        state_dict = torch.load(resume) 
-        self.id_masks=state_dict['id_masks']
-        self.ood_masks=state_dict['ood_masks']   
-        du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
-        
-        
-        self.id_detect_fusion.update(self.id_masks,du_gt)
-        self.ood_detect_fusion.update(self.ood_masks,1-du_gt)        
-          
-        id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
-        ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
-        tpr=self.id_detect_fusion.get_TPR()
-        tnr=self.ood_detect_fusion.get_TPR()        
-        self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
-            format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
-        self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
-        
-        with torch.no_grad():
-            for  i, (inputs, targets, idx) in enumerate(self.test_unlabeled_trainloader):
-                 self.ood_detect_confusion_matrix.update(self.id_masks[idx], targets)
-
-        tprs=self.ood_detect_confusion_matrix.get_TPR_per_class()
-        fnrs=self.ood_detect_confusion_matrix.get_FNR_per_class()
-        self.ood_detect_confusion_matrix.plot_ood_detect_confusion_bar( tprs=tprs,fnrs=fnrs,labels=[i+1 for i in range(self.num_classes)],save_path=os.path.join(self.pic_dir,'ood_detection_bar.jpg'))
-        
-        self.logger.info('=== Class TPRS:{}'.format(tprs))
-        self.logger.info('=== Class TNRS:{}'.format(fnrs))
-        
-      
-        self.logger.info("Successfully loaded the id_mask.") 
-        return
+   
     
     def get_sim_with_prototypes(self,features,pred_class):
         # 获得每个样本的价值，如何评估每个样本是否在边界上？

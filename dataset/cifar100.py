@@ -1,5 +1,5 @@
 import logging
-
+import random
 import torchvision
 from yacs.config import CfgNode
 from .build_transform import  build_simclr_transform
@@ -52,7 +52,8 @@ def get_cifar100(root, out_dataset, start_label=0,ood_ratio=0,
 
     # whether to shuffle the class order
     class_inds = list(range(num_classes))
-
+    if cfg.DATASET.DU.ID.DISTRIBUTION=='Random':
+        random.shuffle(class_inds)
     # make synthetic imbalance for labeled set
     if imb_factor_l > 1:
         l_train, class_inds = make_imbalance(
@@ -84,10 +85,10 @@ def get_cifar100(root, out_dataset, start_label=0,ood_ratio=0,
             seed=seed
         )
     if cfg.DATASET.DU.OOD.INCLUDE_ALL:        
-        ul_train=ood_inject(ul_train,ood_root,ood_dataset,include_all=True)
+        ul_train=ood_inject(ul_train,ood_root,ood_dataset=ood_dataset,include_all=True)
     else:
         if ood_r>0:
-            ul_train=ood_inject(ul_train,ood_root,ood_r,ood_dataset)
+            ul_train=ood_inject(ul_train,ood_root,ood_r,ood_dataset=ood_dataset)
         
     
     labeled_data_num=len(l_train['labels'])

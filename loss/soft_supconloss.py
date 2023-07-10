@@ -17,7 +17,7 @@ class SoftSupConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, features, max_probs, labels=None, mask=None, reduction="mean", select_matrix=None):
+    def forward(self, features, max_probs=None, labels=None, mask=None, reduction="mean", select_matrix=None):
         """Compute loss for model. If both `labels` and `mask` are None,
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
@@ -46,7 +46,7 @@ class SoftSupConLoss(nn.Module):
             raise ValueError('Cannot define both `labels` and `mask`')
         elif labels is None and mask is None:
             mask = torch.eye(batch_size, dtype=torch.float32).to(device)
-        elif labels is not None and select_matrix is not None:
+        elif labels is not None and select_matrix is not None and max_probs is not None:
             labels = labels.contiguous().view(-1, 1)
             if labels.shape[0] != batch_size:
                 raise ValueError('Num of labels does not match num of features')

@@ -11,11 +11,11 @@ from .openmatch_trainer import OpenMatchTrainer
 from .dcssl_trainer import DCSSLTrainer
 from .ccssl_trainer import CCSSLTrainer
 from .mtcf_trainer import MTCFTrainer
-from .acssl_trainer import ACSSLTrainer
-from .pcssl_trainer import PCSSLTrainer
-from .ressl_trainer import ReSSLTrainer
+from .acssl_trainer import ACSSLTrainer 
 from .fixmatchbcl_trainer import FixMatchBCLTrainer
 from .ood_detector_trainer import OODDetectorTrainer
+from .abc_trainer import ABCTrainer
+from .cossl_trainer import CoSSLTrainer
 
 def build_trainer(cfg):
     alg=cfg.ALGORITHM.NAME
@@ -43,14 +43,12 @@ def build_trainer(cfg):
         return CCSSLTrainer(cfg) 
     # HXL
     elif alg== 'DCSSL':
-        return DCSSLTrainer(cfg)   
-    elif alg== 'ACSSL':
-        return ACSSLTrainer(cfg) 
-    elif alg== 'PCSSL':
-        return PCSSLTrainer(cfg) 
-    elif alg== 'ReSSL':
-        return ReSSLTrainer(cfg) 
+        return DCSSLTrainer(cfg)    
     elif alg=='OODDetect':
         return OODDetectorTrainer(cfg)
+    elif alg=='ABC':
+        return ABCTrainer(cfg)
+    elif alg=='CoSSL':
+        return CoSSLTrainer(cfg)
     else:
         raise "The algorithm type is not valid!"

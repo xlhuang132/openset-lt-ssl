@@ -7,6 +7,7 @@ from .base import BaseNumpyDataset
 from .transform import build_transforms
 from .utils_ import make_imbalance, map_dataset, split_trainval, split_val_from_train, x_u_split,ood_inject
 import numpy as np
+import random
  
 def get_cifar10(root, out_dataset, start_label=0,ood_ratio=0, 
                  transform_train=None, transform_val=None,test_mode=False,
@@ -46,12 +47,14 @@ def get_cifar10(root, out_dataset, start_label=0,ood_ratio=0,
 
     # unlabeled sample generation unber SSL setting
     ul_train = None
-    l_train, ul_train = x_u_split(l_train, num_l_head, num_ul_head, seed=seed )
+    l_train, ul_train = x_u_split(l_train, num_l_head, num_ul_head, seed=seed)
     if algorithm == "Supervised":
         ul_train = None
 
     # whether to shuffle the class order
     class_inds = list(range(num_classes))
+    if cfg.DATASET.DU.ID.DISTRIBUTION=='Random':
+        random.shuffle(class_inds)
 
     # make synthetic imbalance for labeled set
     if imb_factor_l > 1:

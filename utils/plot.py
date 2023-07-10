@@ -32,27 +32,26 @@ def plot_pd_heatmap(results,save_path=''):
     
 def plot_dots(x=[],y=[],titles=[],save_path='',mode='e'):
     n=len(x)
-    plt.figure(figsize=(8,8))
-    fig,ax=plt.subplots(2,2)
+    fig=plt.figure(figsize=(8,10))
     font_size=8
-    ax=ax.flatten() 
-    xticks=[0.2*i for i in range(1,6)]
+    xticks=[0.2,0.4,0.6,0.8,1.0]
     if mode=='e':
         yticks=range(0,13,2)
-    else:
-        # yticks=[0.6,0.7,0.8,0.9,1.0]
-        yticks=[0.1*i for i in range(6)]
+    else: 
+        yticks=[0.1,0.2,0.3,0.4,0.5]
     for i in range(n):
-        plt.subplot(2,2,i+1)
-        ax[i].scatter(x[i], y[i],marker='o',s=1)
-        ax[i].set_title(titles[i], fontproperties=font_h) 
-        ax[i].set_xlabel('Confidence', fontproperties=font_h) 
+        ax=plt.subplot(3,2,i+1)
+        ax.scatter(x[i], y[i],marker='o',s=1)
+        ax.set_title(titles[i], fontproperties=font_h) 
+        ax.set_xlabel('Confidence', fontproperties=font_h) 
         if mode=='e':
-            ax[i].set_ylabel('Euclidean Distance', fontproperties=font_h)
+            ax.set_ylabel('Euclidean Distance', fontproperties=font_h)
         else:    
-            ax[i].set_ylabel('Cosine Distance', fontproperties=font_h)   
-        ax[i].set_xticks(xticks)
-        ax[i].set_yticks(yticks)
+            ax.set_ylabel('Cosine Distance', fontproperties=font_h)   
+        ax.set_xticks(xticks)  
+        ax.set_xticklabels(xticks, fontproperties=font_h)
+        ax.set_yticks(yticks)
+        ax.set_yticklabels(yticks, fontproperties=font_h)
         
     fig.tight_layout()
     if save_path!='': 
@@ -61,24 +60,20 @@ def plot_dots(x=[],y=[],titles=[],save_path='',mode='e'):
     
 def plot_pd_heatmaps(results,r=1,c=1,save_path='',title='',subtitles=[]):
     assert len(results)==r*c
-    plt.figure(figsize=(8,8)) 
-    fig,ax=plt.subplots(r,c)
-    font_size=8
-    ax=ax.flatten() 
-    for i in range(r):
-        for j in range(c):
-            plt.subplot(r,c,i*c+j+1)
-            sns.heatmap(data=results[i*c+j])
-            plt.title(subtitles[i*r+j],fontsize=font_size)
-            # im=ax[i*r+j].imshow(results[i*r+j])
-            # ax[i*r+j].set_xticks(np.arange(0, 10, 1))
-            # ax[i*r+j].set_yticks(np.arange(0, 10, 1))
-            # ax[i*r+j].set_title(subtitles[i*r+j],fontsize=font_size)
-
-    # cb = fig.colorbar(im, ax=ax,fraction=0.014, pad=0.05) 
-    # cb.ax.tick_params(labelsize=font_size)  
-    # cb.set_label('Number',fontsize=font_size)
+    font_size=12
+    font_h.set_size(font_size)
+    sns.set_theme(font='Helvetica')
+    plt.figure(figsize=(9,4))
+    grid=plt.GridSpec(1,11,wspace=1.5)
+    plt.subplot(grid[0,0:5])
+    plt.title(subtitles[0], fontproperties=font_h)
+    sns.heatmap(data=results[0], yticklabels=np.arange(1, 11, 1), xticklabels=np.arange(1, 11, 1),cbar=False)
     
+    plt.subplot(grid[0,5:11])
+    plt.title(subtitles[1], fontproperties=font_h)
+    sns.heatmap(data=results[1], yticklabels=np.arange(1, 11, 1), xticklabels=np.arange(1, 11, 1))
+
+    plt.suptitle(title, fontproperties=font_h)
     if save_path!='': 
         plt.savefig(save_path, bbox_inches='tight',dpi=300)
     plt.close()
@@ -292,47 +287,48 @@ def plot_dl_du_all_feat_tsne(feat,y,title,num_classes,save_path="",dl_len=None,d
 
 def plot_ablation_feat_tsne(gts,preds,feats,num_classes=0,title='Test data feature',alg='',
                 subtitles=[],save_path=''):
-    assert subtitles!=[] and len(subtitles)==4
+    assert subtitles!=[]
     
     fontsize=24
     
     colors = generate_colors(num_classes,return_deep_group=True) 
     colors_r,colors_w=colors[:num_classes],colors[num_classes:] 
     n=len(gts)//len(subtitles) 
-    fig = plt.figure(figsize=(10, 10))
-    
+    # fig = plt.figure(figsize=(10, 10)) (12,18)
+    fig = plt.figure(figsize=(12,18)) 
     # font_zh.set_size(fontsize) 
     for i in range(len(subtitles)): 
-        # gt=gts[i]
-        # pred=preds[i]
-        # feat=feats[i]
-        # c_item=[]
-        # if torch.is_tensor(gt): gt = gt.numpy() 
-        # X_tsne = TSNE(n_components=2,random_state=33,early_exaggeration=30).fit_transform(feat.numpy()) 
+        gt=gts[i]
+        pred=preds[i]
+        feat=feats[i]
+        c_item=[]
+        if torch.is_tensor(gt): gt = gt.numpy() 
+        X_tsne = TSNE(n_components=2,random_state=33,early_exaggeration=30).fit_transform(feat.numpy()) 
         
-        ax = fig.add_subplot(2,2,i+1)  
-        logname=os.path.join(save_path,'{}.csv'.format(subtitles[i]))
-        df=pd.read_csv(logname,sep=' ',delimiter=',',names=['x', 'y', 'gt','pred','c'])
-        df=np.array(df)
-        for j in range(1,len(df)): 
-            x,y,g,p,c=df[j] 
-            if g==p:
-                plt.scatter(x, y,s=10, c=c,marker='o') 
-            else:            
-                plt.scatter(x,y,s=20, c=c,marker='+')#,alpha=0.5 
+        ax = fig.add_subplot(3,2,i+1)  
+        # logname=os.path.join(save_path,'{}.csv'.format(subtitles[i]))
+        # df=pd.read_csv(logname,sep=' ',delimiter=',',names=['x', 'y', 'gt','pred','c'])
+        # df=np.array(df)
+        # for j in range(1,len(df)): 
+        #     x,y,g,p,c=df[j] 
+        #     if g==p:
+        #         plt.scatter(x, y,s=10, c=c,marker='o') 
+        #     else:            
+        #         plt.scatter(x,y,s=20, c=c,marker='+')#,alpha=0.5 
         # with open(logname, 'w') as logfile:
         #     logwriter = csv.writer(logfile, delimiter=',') 
-        #     for j in range(len(gt)):
-        #         if gt[j]==pred[j]:
-        #             cp=colors_r[gt[j]]
-        #         else:
-        #             cp=colors_w[gt[j]]
+        for j in range(len(gt)):
+            if gt[j]==pred[j]:
+                cp=colors_r[gt[j]]
+            else:
+                cp=colors_w[gt[j]]
+            c_item.append(cp)
         #         logwriter.writerow([X_tsne[j, 0], X_tsne[j, 1],gt[j],pred[j].item(),cp])
-        # for j in range(len(X_tsne)):
-        #     if gt[j]==pred[j]:
-        #         plt.scatter(X_tsne[j][0], X_tsne[j][ 1],s=10, c=c_p[j],marker='o',alpha=0.5) 
-        #     else:            
-        #         plt.scatter(X_tsne[j][ 0], X_tsne[j][ 1],s=10, c=c_p[j],marker='+',alpha=0.5) 
+        for j in range(len(X_tsne)):
+            if gt[j]==pred[j]:
+                plt.scatter(X_tsne[j][0], X_tsne[j][ 1],s=10, c=c_item[j],marker='o',alpha=0.5) 
+            else:            
+                plt.scatter(X_tsne[j][ 0], X_tsne[j][ 1],s=10, c=c_item[j],marker='+',alpha=0.5) 
              
         
         # ax.scatter(X_tsne[:,0], X_tsne[:,1],s=10, c=c_item,alpha=0.5) 
@@ -340,8 +336,8 @@ def plot_ablation_feat_tsne(gts,preds,feats,num_classes=0,title='Test data featu
         plt.yticks([])
         
         # ax.set_title(subtitles[i], y=-0.18, fontsize=fontsize) 
-        font_t.set_size(fontsize+4)         
-        ax.set_title(subtitles[i], y=-0.18, fontproperties=font_t) 
+        font_h.set_size(fontsize+4)         
+        ax.set_title(subtitles[i], y=-0.18, fontproperties=font_h) 
         # elif i==1:
         #     ax = fig.add_subplot(222)
         #     labels=[mpatches.Patch(color=colors_r[i],label="Correct-{}".format(i+1))for i in range(len(colors_r))]+\
@@ -352,12 +348,10 @@ def plot_ablation_feat_tsne(gts,preds,feats,num_classes=0,title='Test data featu
     
     plt.subplots_adjust(wspace =0.05,)#调整子图间距
             
-    
-    # plt.show()
-    if save_path!="":
-        filename="test_data_ablation_feat_tsne.jpg" 
-        plt.savefig(os.path.join(save_path,filename), dpi=300, bbox_inches='tight')  
-        print('save path:{}'.format(os.path.join(save_path,filename)))
+     
+    if save_path!="": 
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')  
+        print('save path:{}'.format(save_path))
     plt.close()
     
     return
@@ -370,13 +364,13 @@ def plot_problem_feat_tsne(gts,preds,feats,num_classes=0,titles='Test data featu
     colors = generate_colors(num_classes,return_deep_group=True) 
     colors_r,colors_w=colors[:num_classes],colors[num_classes:]
     # plt.figure(figsize=(8,8)) 
-    plt.figure(figsize=(12,18)) 
+    plt.figure(figsize=(18,12)) 
     for i in range(len(gts)):
         gt=gts[i]
         pred=preds[i]
         feat=feats[i]
         title=titles[i]
-        plt.subplot(3,2,i+1)
+        plt.subplot(2,3,i+1)
         
         c_p = [] 
         # gt=[]
@@ -413,7 +407,7 @@ def plot_problem_feat_tsne(gts,preds,feats,num_classes=0,titles='Test data featu
         plt.xticks([])
         plt.yticks([])
         font_t.set_size(fontsize) 
-        plt.title(title, fontproperties=font_t,y=-0.1) #
+        plt.title(title, fontproperties=font_t) #,y=-0.1 在下方
         # plt.title(title, fontsize=fontsize,y=-0.1) #
         
     plt.subplots_adjust(wspace =0.03,hspace=0.12)#调整子图间距
@@ -491,7 +485,39 @@ def plot_accs_zhexian(group_accs,branches_name,title,x_legend,save_path="",xlabe
         plt.savefig(save_path,dpi=300, bbox_inches='tight')
     plt.close() 
 
-
+def plot_stack_bar_with_bg(group_accs,branches_name,title,x_legend,save_path="",xlabel="",ylabel='Number',group_split=[]):
+    plt.axvspan(xmin=0,xmax=group_split[0]-1, facecolor='#1f77b4' , alpha=0.2)
+    plt.axvspan(xmin=group_split[0]-1,xmax=group_split[0]+group_split[1]-1, facecolor='#ff7f0e', alpha=0.2)
+    plt.axvspan(xmin=group_split[0]+group_split[1]-1,xmax=group_split[0]+group_split[1]+group_split[2]-1, facecolor='#ee82ee', alpha=0.2)  
+    font_size=14
+    font_h.set_size(font_size)
+    plt.xlabel(xlabel,fontproperties=font_h)
+    plt.ylabel(ylabel,fontproperties=font_h)
+    y_ticks=np.array([0,2000,4000,6000,8000,10000,12000,14000,16000,18000,20000])
+    # y_ticks=np.array([0,5000,10000,15000,20000,25000])
+    plt.xticks([])  
+    plt.yticks(ticks=y_ticks,fontproperties=font_h)
+    width=3
+    cur=np.array([0]*len(group_accs[0]))
+    for i,group_acc in enumerate(group_accs): 
+        plt.bar(x_legend, group_acc,bottom=cur,width=width,label=branches_name[i])   
+        cur+=group_acc
+        
+    plt.xlim(0,group_split[0]+group_split[1]+group_split[2]-1)
+    
+    # plt.ylim(0,30000)
+    plt.ylim(0,22000)
+    # plt.legend(['Head','Medium','Tail']+branches_name,fontsize=8, prop=font_h) 
+    # plt.legend(['Head','Medium','Tail']+branches_name,fontsize=8, prop=font_h)   
+    # plt.legend(branches_name,fontsize=8, prop=font_h) 
+      
+    # plt.legend(prop=font_h) 
+    plt.title(title,fontproperties=font_h)
+    
+    if save_path!='': 
+        plt.savefig(save_path,dpi=300, bbox_inches='tight') #
+    plt.close() 
+    
 def plot_zhexian_with_bg(group_accs,branches_name,title,x_legend,save_path="",xlabel="",ylabel='Number',color=[],
                          group_split=[]):
     assert len(branches_name)==len(group_accs)
@@ -501,11 +527,13 @@ def plot_zhexian_with_bg(group_accs,branches_name,title,x_legend,save_path="",xl
     plt.ylabel(ylabel,fontproperties=font_h)
     plt.xticks([])  
     plt.yticks(fontproperties=font_h)
-    markers=['o','X','*','^','D','s']
-    linestyles=['-','dotted','--',':','-.','dashdot']
+    markers=['o','X','*','^','D','s',"P"]
+    linestyles=['-','dotted',' ','--',':','-.','dashdot']
+    
+    # linestyles=[' ',' ',' ',' ',' ',' ',' ']
     for i,group_acc in enumerate(group_accs):
         # plt.bar(x_legend, group_acc)  # 绘制折线图，添加数据点，设置点的大小
-        plt.plot(x_legend, group_acc, marker=markers[i], linestyle=linestyles[i],linewidth=2, markersize=4)  # 绘制折线图，添加数据点，设置点的大小
+        plt.plot(x_legend, group_acc, marker=markers[i], linestyle=linestyles[i],linewidth=2, markersize=6)  # 绘制折线图，添加数据点，设置点的大小
      
     plt.axvspan(xmin=0,xmax=group_split[0]-1, facecolor='#1f77b4' , alpha=0.2)
     plt.axvspan(xmin=group_split[0]-1,xmax=group_split[0]+group_split[1]-1, facecolor='#ff7f0e', alpha=0.2)
@@ -781,8 +809,8 @@ def plot_r_group_together(group_accs,branches_name,title,x_legend,save_path="",x
     label_fontsize=16
     legend_fontsize=12
     title_fontsize=18
-    yy=-0.54
-    fig = plt.figure(figsize=(8,5)) 
+    yy=-0.4
+    fig = plt.figure(figsize=(12,3)) 
     ff= {  # 用 dict 单独指定 title 样式
     'family': 'Helvetica',
     'weight': 'normal', 
@@ -797,7 +825,7 @@ def plot_r_group_together(group_accs,branches_name,title,x_legend,save_path="",x
     linestyles=['-','dotted','--',':','-.','dashdot']
     subtitles=['(a) Head','(b) Medium', '(c) Tail']
     for i in range(1,len(group_accs)+1):
-        ax=plt.subplot(2,2,i)
+        ax=plt.subplot(1,3,i)
         font_t.set_size(title_fontsize)
         ax.set_title(subtitles[i-1], y=yy,fontproperties=font_t )  
         # ax.set_title(subtitles[i-1], y=yy,fontsize=title_fontsize )  
@@ -820,10 +848,10 @@ def plot_r_group_together(group_accs,branches_name,title,x_legend,save_path="",x
         font_h.set_size(legend_fontsize)
         if i==3:
             # plt.legend(branches_name,loc='lower left',prop=font_zh)  ##设置ax4中legend的位置，将其放在图外
-            plt.legend(branches_name,loc=2, bbox_to_anchor=(1.47,1.01),borderaxespad = 0., prop=font_h)  ##设置ax4中legend的位置，将其放在图外
+            plt.legend(branches_name,loc=2, bbox_to_anchor=(1.1,1.0),borderaxespad = 0., prop=font_h)  ##设置ax4中legend的位置，将其放在图外
     
             # plt.legend(branches_name,loc=2, bbox_to_anchor=(1.43,1.01),borderaxespad = 0., fontsize=legend_fontsize) 
-    plt.subplots_adjust(hspace=0.6,wspace=0.25)#,wspace=0.3 
+    plt.subplots_adjust(hspace=0.6,wspace=0.3)#,wspace=0.3 
     if save_path!='': 
         plt.savefig(save_path,dpi=300, bbox_inches='tight')
     plt.close() 

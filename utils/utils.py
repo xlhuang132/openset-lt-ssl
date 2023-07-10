@@ -163,6 +163,11 @@ def get_DL_dataset_path(cfg,dataset=None,):
 def get_DL_dataset_alg_path(cfg,dataset=None,algorithm=None,labeled_loss_type=None):
     parent_path=get_DL_dataset_path(cfg,dataset=dataset)
     algorithm_name=cfg.ALGORITHM.NAME   if not algorithm else algorithm 
+    if cfg.ALGORITHM.OOD_DETECTOR.ENABLE:
+        algorithm_name+='+OOD-F.'
+    if cfg.ALGORITHM.NAME=='MOOD' and cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE!='PAP':
+        algorithm_name+=cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE
+        
     model_name=cfg.MODEL.NAME
     labeled_loss_type=cfg.MODEL.LOSS.LABELED_LOSS_CLASS_WEIGHT_TYPE if not labeled_loss_type else labeled_loss_type
     if labeled_loss_type and labeled_loss_type!='None':
@@ -178,7 +183,12 @@ def get_DL_dataset_alg_DU_dataset_path(cfg,dataset=None,algorithm=None,labeled_l
     num_unlabeled_head=cfg.DATASET.DU.ID.NUM_UNLABELED_HEAD if not num_unlabeled_head else num_unlabeled_head
     imb_factor_ul=cfg.DATASET.DU.ID.IMB_FACTOR_UL  if not imb_factor_ul else imb_factor_ul
     # DL + DU_ID数据设置
-    DL_DU_ID_setting='DL-{}-IF-{}-DU{}-IF_U-{}'.format(num_labeled_head,imb_factor_l,num_unlabeled_head,imb_factor_ul)
+    if cfg.DATASET.DU.ID.REVERSE_UL_DISTRIBUTION:
+        DL_DU_ID_setting='DL-{}-IF-{}-DU{}-IF_U-{}-reverse'.format(num_labeled_head,imb_factor_l,num_unlabeled_head,imb_factor_ul)
+    elif cfg.DATASET.DU.ID.DISTRIBUTION=='Random':
+        DL_DU_ID_setting='DL-{}-IF-{}-DU{}-IF_U-{}-random'.format(num_labeled_head,imb_factor_l,num_unlabeled_head,imb_factor_ul)
+    else:
+        DL_DU_ID_setting='DL-{}-IF-{}-DU{}-IF_U-{}'.format(num_labeled_head,imb_factor_l,num_unlabeled_head,imb_factor_ul)
     path=os.path.join(parent_path, DL_DU_ID_setting)
     return path
 
@@ -191,7 +201,7 @@ def get_DL_dataset_alg_DU_dataset_OOD_path(cfg,dataset=None,algorithm=None,label
     ood_dataset=cfg.DATASET.DU.OOD.DATASET if not ood_dataset else ood_dataset
     ood_r=cfg.DATASET.DU.OOD.RATIO if not ood_r else ood_r
     # DL + DU_ID数据设置
-    if not cfg.DATASET.DU.OOD.INCLUDE_ALL:
+    if not cfg.DATASET.DU.OOD.INCLUDE_ALL: 
         OOD_setting='OOD-{}-r-{:.2f}'.format(ood_dataset,ood_r)
     else:
         OOD_setting='OOD-{}-all'.format(ood_dataset)

@@ -25,10 +25,52 @@ class TransformTwice:
         out1 = self.transform(inp)
         out2 = self.transform(inp)
         return out1, out2
+    
+class TransformTwiceABC:
+    def __init__(self, transform,transform2):
+        self.transform = transform
+        self.transform2 = transform2
+
+    def __call__(self, inp):
+        out1 = self.transform(inp)
+        out2 = self.transform2(inp)
+        out3 = self.transform2(inp)
+        return out1, out2, out3
 
 other_func = {"RandAugmentMC": RandAugmentMC,"GaussianBlur":GaussianBlur}
 
 
+
+def get_strong_transform(cfg):
+    
+    aug = Augmentation 
+    dataset=cfg.DATASET.NAME
+    resolution = cfg.DATASET.RESOLUTION
+    if dataset == "cifar10":
+        img_size = (32, 32)
+        norm_params = dict(mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616))
+
+    elif dataset == "cifar100":
+        norm_params = dict(mean=(0.5071, 0.4865, 0.4409), std=(0.2673, 0.2564, 0.2762))
+        img_size = (32, 32)
+
+    elif dataset == "stl10":
+        img_size = (96, 96)  # original image size
+        norm_params = dict(mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616))
+    elif dataset =='svhn':
+        img_size = (32, 32)  # original image size
+        norm_params = dict(mean=(0.4380, 0.4440, 0.4730), std=(0.1751, 0.1771, 0.1744))
+    
+    strong_transform=aug(
+                    cfg,
+                    img_size,
+                    strong_aug=True,
+                    norm_params=norm_params,
+                    resolution=resolution,
+                    ra_first=False
+                )  # strong (randaugment)
+           
+    return strong_transform
 def get_trans(trans_cfg):
     init_params = copy.deepcopy(trans_cfg)
     type_name = init_params.pop("type")
@@ -237,7 +279,7 @@ def build_transform(cfg):
                 ),  # identity
             ]
         )
-    elif algo_name in ['CCSSL','OODDetect','DCSSL']: #'DCSSL'
+    elif algo_name in ['CCSSL','OODDetect','DCSSL','ABC','CoSSL']: #'DCSSL'
         ul_train = GeneralizedSSLTransform(
             [
                 aug(cfg, img_size, norm_params=norm_params, resolution=resolution),  # weak
