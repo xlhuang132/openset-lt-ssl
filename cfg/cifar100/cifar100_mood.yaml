@@ -1,84 +1,72 @@
 
 
-OUTPUT_DIR: "outputs_knn/" # 0.1* id loss + 0.1*ood loss + EMA更新特征 + 更新域标签 + thresh 0.8
+OUTPUT_DIR: "outputs/" # 0.1* id loss + 0.1*ood loss + EMA更新特征 + 更新域标签 + thresh 0.8
 
 # SEED : 7  _upper_bound
 
 # SEED_PATH_ENABLE : True 
 SHOW_STEP: 100
 SAVE_EPOCH: 10
-MAX_EPOCH: 300
+MAX_EPOCH: 500
 TRAIN_STEP: 500 # 
 ALGORITHM:
-  NAME: "MOOD"
-  CONFIDENCE_THRESHOLD: 0.95
+  NAME: "MOOD" 
   MOOD:
-    NUM_AUG: 2
-    TEMPERATURE: 0.5 # ?
+    NUM_AUG: 2 
     MIXUP_ALPHA: 0.5  
-    PAP_LOSS_WEIGHT: 0.1
-    FEATURE_LOSS_TEMPERATURE: 0.5
+    ID_TEMPERATURE: 0.1
+    OOD_TEMPERATURE: 0.007
+    PAP_LOSS_WEIGHT: 0.2
+    FEATURE_LOSS_TYPE: 'PAP' # PAP/ICL/PCL/CCL
+    WARMUP_EPOCH: 5
   ABLATION: 
     ENABLE: False
-    DUAL_BRANCH: False
-    MIXUP: False     
-    OOD_DETECTION: False 
-    PAP_LOSS: False
+    MOOD:
+      DUAL_BRANCH: False
+      MIXUP: False     
+      OOD_DETECTION: False 
+      PAP_LOSS: False
   PRE_TRAIN: 
-    ENABLE: True
-    WARMUP_EPOCH: 100
+    ENABLE: False
+    WARMUP_EPOCH: 500
     SimCLR: 
       ENABLE: True
-      TEMPERATURE: 0.5
-    OOD_DETECTOR:
-      TEMPERATURE: 0.5
-      MAGNITUDE: 0.0014 #  
-      THRESHOLD: 0.10004 
-      K: 200 # 'Top k most similar images used to predict the label'
-    
+      TEMPERATURE: 0.1  
       
 MODEL:
-  NAME: "Resnet34" #"resnet50" #"WRN_28_2" # 
-  LOSS:
-    LABELED_LOSS: "CrossEntropyLoss" 
-    LABELED_LOSS_CLASS_WEIGHT_TYPE: "None"   # [ "CBLoss" "Reweight" "None" ]  
-    UNLABELED_LOSS: "CrossEntropyLoss"
-    UNLABELED_LOSS_WEIGHT: 1.0
-    WITH_SUPPRESSED_CONSISTENCY: False 
-    FEATURE_LOSS:
-      TEMPERATURE: 0.5 
-      CENTER_DECAY_RATIO: 0.9
-
-  OPTIMIZER:
-    TYPE: 'SGD'
-    BASE_LR: 0.03
-    MOMENTUM: 0.9
-    WEIGHT_DECAY: 5e-4 
+  NAME: "WRN_28_8" #"resnet50" #"WRN_28_2" # 
+  QUEUE:
+    FEAT_DIM: 64  
+    MAX_SIZE: 256
+  
 
 DATASET:
   NAME: "cifar100"
   ROOT: "./data/cifar100" 
-  NUM_CLASSES: 100
-  GROUP_SPLITS: [30,35,35]
+  NUM_CLASSES: 100 
   DOMAIN_DATASET_RETURN_INDEX: True
   UNLABELED_DATASET_RETURN_INDEX: True
-  LABELED_DATASET_RETURN_INDEX: True
-  IMB_TYPE: 'exp'
+  LABELED_DATASET_RETURN_INDEX: True 
+  GROUP_SPLITS: [30,35,35]
+  BATCH_SIZE: 16
+  IFS: [50]
+  OODRS: [0.5]  
+  NUM_VALID: 5000
   DL:
-    NUM_LABELED_HEAD: 150
-    IMB_FACTOR_L: 100
+    NUM_LABELED_HEAD: 50
+    # IMB_FACTOR_L: 100
   DU:
     ID:
-      NUM_UNLABELED_HEAD: 300
-      IMB_FACTOR_UL: 100
-      REVERSE_UL_DISTRIBUTION: False
+      NUM_UNLABELED_HEAD: 400
+      # IMB_FACTOR_UL: 100
+      # REVERSE_UL_DISTRIBUTION: False
+      DISTRIBUTION: 'Random'
     OOD:
       ENABLE: True
       DATASET: 'TIN'
-      RATIO: 0.75 #  
-    UNLABELED_BATCH_RATIO: 2
-  BATCH_SIZE: 64
-  NUM_WORKERS: 8
+      # INCLUDE_ALL: True
+      # RATIO: 0.75 #  
+    # UNLABELED_BATCH_RATIO: 2 
    
   DUAL_SAMPLER:
     ENABLE: True
@@ -87,7 +75,5 @@ DATASET:
   TRANSFORM:
     UNLABELED_STRONG_AUG: True
     LABELED_STRONG_AUG: True
+# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs/cifar100/MOODCCL/WRN_28_8/DL-50-IF-50-DU400-IF_U-50/OOD-TIN-r-0.50/models/checkpoint.pth'
 
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs_knn/cifar100/MOOD/WRN_28_2/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-r-0.25/models/warmup_model.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/outputs_knn/cifar100/MOOD/Resnet34/DL-150-IF-100-DU300-IF_U-100/OOD-TIN-r-0.50/models/warmup_model.pth'
-# RESUME: '/home/aa/xlhuang/Openset-LT-SSL/checkpoint/cifar100_IF100_R0.75_7'
