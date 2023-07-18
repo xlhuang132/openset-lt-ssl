@@ -84,13 +84,15 @@ class MOODTrainer(BaseTrainer):
             
         # OOD  
         if not self.ablation_enable or self.ablation_enable and self.ood_detection_enable :
-            try:
-                (inputs_ood,inputs_ood2),_,_ = self.unlabeled_ood_train_iter.next()
-            except:
-                self.unlabeled_ood_train_iter=iter(self.unlabeled_ood_trainloader)
-                (inputs_ood,inputs_ood2),_,_  = self.unlabeled_ood_train_iter.next()
-            
-            inputs_ood,inputs_ood2=inputs_ood.cuda(),inputs_ood2.cuda()
+            # if self.feature_loss_type=='ICL':pass
+            # else:
+                try:
+                    (inputs_ood,inputs_ood2),_,_ = self.unlabeled_ood_train_iter.next()
+                except:
+                    self.unlabeled_ood_train_iter=iter(self.unlabeled_ood_trainloader)
+                    (inputs_ood,inputs_ood2),_,_  = self.unlabeled_ood_train_iter.next()
+                
+                inputs_ood,inputs_ood2=inputs_ood.cuda(),inputs_ood2.cuda()
             
             
         inputs_u , inputs_u2= inputs_u.cuda(),inputs_u2.cuda()
@@ -211,7 +213,7 @@ class MOODTrainer(BaseTrainer):
             self.losses_pap_ood.update(Loodfeat.item(), ood_feature_weak.size(0)) 
             return Lidfeat+Loodfeat
         elif self.feature_loss_type=='ICL':
-            return self.get_ICL_feature_loss(ul_feature_weak,ul_feature_strong)
+            return self.get_ICL_feature_loss(ul_feature_weak,ul_feature_strong,ood_feature_weak,ood_feature_strong)
         elif self.feature_loss_type=='PCL':  
             return self.get_PCL_feature_loss(l_feature,ul_feature_weak,targets_x,pred_class,loss_weight)
         else:  
@@ -223,8 +225,9 @@ class MOODTrainer(BaseTrainer):
     #     self.losses_pap_id.update(Licl.item(), ul_feature_weak.size(0)) 
     #     return Licl
     
-    def get_ICL_feature_loss(self,ul_feature_weak,ul_feature_strong):
-        features = torch.cat([ul_feature_weak.unsqueeze(1), ul_feature_strong.unsqueeze(1)], dim=1)
+    def get_ICL_feature_loss(self,ul_feature_weak,ul_feature_strong,ood_feature_weak,ood_feature_strong):
+        features = torch.cat([torch.cat([ul_feature_weak,ood_feature_weak],dim=0).unsqueeze(1), 
+                              torch.cat([ul_feature_strong,ood_feature_strong],dim=0).unsqueeze(1)], dim=1)
         Licl=self.pap_loss_weight*self.loss_contrast(features)
         self.losses_pap_id.update(Licl.item(), ul_feature_weak.size(0)) 
          

@@ -433,25 +433,28 @@ class BaseTrainer():
                 idx2=id_mask_path.find('/models')
                 id_mask_path=id_mask_path[:idx1+len('OOD-TIN-r-0.50')]+id_mask_path[idx2:]
        
-            else:return
+            else:
+                return
         else:
                 
             if self.ood_filter_enable:
                 id_mask_path=os.path.join(self.model_dir.replace(self.cfg.ALGORITHM.NAME+'+OOD-F.','OODDetect'),'checkpoint.pth')
             else:
                 if self.cfg.ALGORITHM.NAME=='MOOD':
-                    foldername=self.cfg.ALGORITHM.NAME+(self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE if self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE!='PAP' else '')
+                    if self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE=='PAP':
+                        foldername=self.cfg.ALGORITHM.NAME
+                    # elif self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE=='ICL':
+                    #     return
+                    else:
+                    # if self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE in ['PCL','CCL','ICL']:
+                        foldername=self.cfg.ALGORITHM.NAME+self.cfg.ALGORITHM.MOOD.FEATURE_LOSS_TYPE 
                 else:
                     foldername=self.cfg.ALGORITHM.NAME
                 id_mask_path=os.path.join(self.model_dir.replace(foldername,'OODDetect'),'checkpoint.pth')
-        if os.path.exists(id_mask_path):
-            self.logger.info(f"Resuming id_masks from: {id_mask_path}")
-            self.logger.info(' ')
-            state_dict = torch.load(id_mask_path) 
-            self.id_masks=state_dict['id_masks']
-            self.ood_masks=state_dict['ood_masks']   
+        if 'upper_bound' in self.cfg.OUTPUT_DIR:
+            self.id_masks=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)]).cuda()
+            self.ood_masks=1-self.id_masks
             du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
-            
             self.id_detect_fusion.update(self.id_masks,du_gt)
             self.ood_detect_fusion.update(self.ood_masks,1-du_gt)        
             
@@ -465,10 +468,34 @@ class BaseTrainer():
             self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
                 format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
             self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
-             
-            self.logger.info("Successfully loaded the id_mask.") 
+            
+            self.logger.info("Successfully loaded the upperbound id_mask.") 
         else:
-            self.logger.info('Id mask path: {} is not existing!'.format(id_mask_path))
+            if os.path.exists(id_mask_path):
+                self.logger.info(f"Resuming id_masks from: {id_mask_path}")
+                self.logger.info(' ')
+                state_dict = torch.load(id_mask_path) 
+                self.id_masks=state_dict['id_masks']
+                self.ood_masks=state_dict['ood_masks']   
+                du_gt=torch.cat([torch.ones(self.ul_num-self.ul_ood_num),torch.zeros(self.ul_ood_num)],dim=0)
+                
+                self.id_detect_fusion.update(self.id_masks,du_gt)
+                self.ood_detect_fusion.update(self.ood_masks,1-du_gt)        
+                
+                id_pre,id_rec=self.id_detect_fusion.get_pre_per_class()[1],self.id_detect_fusion.get_rec_per_class()[1]
+                ood_pre,ood_rec=self.ood_detect_fusion.get_pre_per_class()[1],self.ood_detect_fusion.get_rec_per_class()[1]
+                tpr=self.id_detect_fusion.get_TPR()
+                tnr=self.ood_detect_fusion.get_TPR()  
+                # rebuild dataloader      
+                self.rebuild_id_ood_dataloader()
+                
+                self.logger.info("== OOD_Pre:{:>5.3f} ID_Pre:{:>5.3f} OOD_Rec:{:>5.3f} ID_Rec:{:>5.3f}".\
+                    format(ood_pre*100,id_pre*100,ood_rec*100,id_rec*100))
+                self.logger.info("=== TPR : {:>5.2f}  TNR : {:>5.2f} ===".format(tpr*100,tnr*100))
+                
+                self.logger.info("Successfully loaded the id_mask.") 
+            else:
+                self.logger.info('Id mask path: {} is not existing!'.format(id_mask_path))
         return
     
     def rebuild_id_ood_dataloader(self,):
